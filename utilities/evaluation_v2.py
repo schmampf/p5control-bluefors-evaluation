@@ -7,7 +7,7 @@ from  h5py import File
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-import warnings, os
+import warnings, os, platform
 
 from .corporate_design_colors_v4 import cmap
 
@@ -123,9 +123,14 @@ def bin_z_over_y(
 
 class EvaluationScript_v2():
     def __init__(self):
-
-        self.file_directory = '/Users/oliver/Documents/measurement_data/24 07 OI-24d-10/unbroken/'
-        self.file_directory = '/home/oliver/Documents/measurement_data/24 07 OI-24d-10/unbroken/'
+        
+        system = platform.system()
+        if system == 'Darwin':
+            self.file_directory = '/Users/oliver/Documents/measurement_data/24 07 OI-24d-10/unbroken/'
+        elif system == 'Linux':
+            self.file_directory = '/home/oliver/Documents/measurement_data/24 07 OI-24d-10/unbroken/'
+        else:
+            warnings.warn(f'{system} needs a user path')
         self.file_name = ''
         self.file_folder = ''
         self.mkey = ''
