@@ -9,6 +9,8 @@ from datetime import datetime
 
 import warnings, os
 
+from .corporate_design_colors_v4 import cmap
+
 """
 Pre-Definition of Functions
 """
@@ -148,6 +150,7 @@ class EvaluationScript_v2():
         self.dpi = 300
         self.pdf = False
         self.cmap = 'viridis'
+        self.cmap = cmap(color='seeblau', bad='gray')
         self.fig_folder = 'figures'
 
         self.indices = {
