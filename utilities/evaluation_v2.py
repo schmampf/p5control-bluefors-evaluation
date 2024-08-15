@@ -123,6 +123,7 @@ class EvaluationScript_v2():
     def __init__(self):
 
         self.file_directory = '/Users/oliver/Documents/measurement_data/24 07 OI-24d-10/unbroken/'
+        self.file_directory = '/home/oliver/Documents/measurement_data/24 07 OI-24d-10/unbroken/'
         self.file_name = ''
         self.file_folder = ''
         self.mkey = ''
