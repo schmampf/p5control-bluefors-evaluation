@@ -119,20 +119,19 @@ def bin_z_over_y(
     return result, counter
     
 def plot_map(
-    x, 
-    y, 
-    z, 
-    x_lim = None, 
-    y_lim = None, 
-    z_lim = None,
-    x_label = r'$x$-label', 
-    y_label = r'$y$-label',  
-    z_label = r'$z$-label', 
-    title = r'Title',
-    fig_nr = 0,
+    x: np.ndarray, 
+    y: np.ndarray, 
+    z: np.ndarray, 
+    x_lim: list[float] = [-1., 1.], 
+    y_lim: list[float] = [-1., 1.], 
+    z_lim: list[float] = [ 0., 0.],
+    x_label: str = r'$x$-label', 
+    y_label: str = r'$y$-label',  
+    z_label: str = r'$z$-label', 
+    fig_nr: int = 0,
     cmap = cmap(color='seeblau', bad='gray'),
-    display_dpi = 100,
-    contrast = 1,
+    display_dpi: int = 100,
+    contrast: float = 1.,
     ):
     
     if z.dtype == np.dtype('int32'):
@@ -140,22 +139,10 @@ def plot_map(
 
     stepsize_x=np.abs(x[-1]-x[-2])/2
     stepsize_y=np.abs(y[-1]-y[-2])/2
-    if x_lim is None:
-        x_ind = [0, -1]
-    else:
-        if x_lim[0] >= x_lim[1]:
-            warnings.warn('First x_lim must be smaller than first one.')
-            return
-        x_ind = [np.abs(x-x_lim[0]).argmin(),
-                    np.abs(x-x_lim[1]).argmin()]
-    if y_lim is None:
-        y_ind = [0, -1]
-    else:
-        if y_lim[0] >= y_lim[1]:
-            warnings.warn('First y_lim must be smaller than first one.')
-            return
-        y_ind = [np.abs(y-y_lim[0]).argmin(),
-                    np.abs(y-y_lim[1]).argmin()]
+    x_ind = [np.abs(x-x_lim[0]).argmin(),
+                np.abs(x-x_lim[1]).argmin()]
+    y_ind = [np.abs(y-y_lim[0]).argmin(),
+                np.abs(y-y_lim[1]).argmin()]
     ext = [x[x_ind[0]]-stepsize_x,
             x[x_ind[1]]+stepsize_x,
             y[y_ind[0]]-stepsize_y,
@@ -165,9 +152,12 @@ def plot_map(
     x = x[x_ind[0]:x_ind[1]]
     y = y[y_ind[0]:y_ind[1]]
 
-    if z_lim is None:
-        z_lim = [np.nanmean(z)-np.nanstd(z)/contrast, 
-                    np.nanmean(z)+np.nanstd(z)/contrast]
+    if z_lim == [0, 0]:
+        z_lim = [float(np.nanmean(z)-np.nanstd(z)/contrast), 
+                 float(np.nanmean(z)+np.nanstd(z)/contrast)]
+        
+    if x_lim[0] >= x_lim[1] or y_lim[0] >= y_lim[1] or z_lim[0] >= z_lim[1]:
+        warnings.warn('First of xy_lim must be smaller than first one.')
 
     plt.close(fig_nr)
     fig, (ax_z, ax_c) = plt.subplots(
@@ -191,7 +181,7 @@ def plot_map(
     ax_z.ticklabel_format(
         axis="both", 
         style="sci", 
-        scilimits=(-3,3),
+        scilimits=(-9,9),
         useMathText=True
     )
     ax_z.tick_params(direction='in')
@@ -202,3 +192,5 @@ def plot_map(
     lim = ax_z.set_ylim(ext[2],ext[3])
     
     return fig, ax_z, ax_c, x, y, z, ext
+
+
