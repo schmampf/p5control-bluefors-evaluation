@@ -1,17 +1,18 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-import warnings, os, platform
+import warnings, os, platform, logging, h5py
 
 from tqdm import tqdm
-from  h5py import File
+from PIL import Image
 
 from .corporate_design_colors_v4 import cmap
 from .evaluation_helper_v2 import *
 
-import logging
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+from importlib import reload
+logger = logging.getLogger(__name__)
+reload(logging)
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 class EvaluationScript_v2():
     def __init__(
@@ -32,7 +33,6 @@ class EvaluationScript_v2():
         self.file_name = ''
         self.file_folder = ''
         self.mkey = ''
-        self.complete_file_name = ''
 
         self.V1_AMP = None
         self.V1_AMP = None
@@ -41,7 +41,11 @@ class EvaluationScript_v2():
 
         self.V_min  = -1.8e-3
         self.V_max  = +1.8e-3
-        self.N_bins = 900
+        self.V_bins = 900
+
+        self.T_min = 0
+        self.T_max = 2
+        self.T_bins = 2000
 
         self.trigger_up = 1
         self.trigger_down = 2
@@ -55,18 +59,55 @@ class EvaluationScript_v2():
         self.pdf_dpi = 600
         self.pdf = False
         self.cmap = cmap(color='seeblau', bad='gray')
-        self.fig_folder = 'figures'
+        self.fig_folder = 'figures/'
         self.contrast = 1
+
+        self.T_axis           = np.zeros(2000)
+        self.I_up_T      = np.zeros(2000)
+        self.I_down_T    = np.zeros(2000)
+        self.dIdV_up_T   = np.zeros(2000)
+        self.dIdV_down_T = np.zeros(2000)
+        
 
         self.indices = {
             'temperatures': [7, -3, 1e-6, 'no_heater'],
             'temperatures_up': [7, -2, 1e-6, 'no_heater'],
         }
-        self.T_binned    = np.zeros(2000)
-        self.I_up_T      = np.zeros(2000)
-        self.I_down_T    = np.zeros(2000)
-        self.dIdV_up_T   = np.zeros(2000)
-        self.dIdV_down_T = np.zeros(2000)
+
+        self.plot_keys = {
+                'y-axis':           ['self.y_axis',            r'$y$ (arb. u.)'],
+                'V_bias_up_muV':    ['self.V_axis*1e6',        r'$V_\mathrm{Bias}^\rightarrow$ (µV)'],
+                'V_bias_up_mV':     ['self.V_axis*1e3',        r'$V_\mathrm{Bias}^\rightarrow$ (mV)'],
+                'V_bias_up_V':      ['self.V_axis*1e0',        r'$V_\mathrm{Bias}^\rightarrow$ (V)'],
+                'V_bias_down_muV':  ['self.V_axis*1e6',        r'$V_\mathrm{Bias}^\leftarrow$ (µV)'],
+                'V_bias_down_mV':   ['self.V_axis*1e3',        r'$V_\mathrm{Bias}^\leftarrow$ (mV)'],
+                'V_bias_down_V':    ['self.V_axis*1e0',        r'$V_\mathrm{Bias}^\leftarrow$ (V)'],
+                'heater_power_muW': ['self.y_axis*1e6',        r'$P_\mathrm{Heater}$ (µW)'],
+                'heater_power_mW':  ['self.y_axis*1e3',        r'$P_\mathrm{Heater}$ (mW)'],
+                'T_all_up_mK':      ['self.T_all_up*1e3',      r'$T_{Sample}$ (mK)'],
+                'T_all_up_K':       ['self.T_all_up*1e0',      r'$T_{Sample}$ (K)'],
+                'T_up_mK':          ['self.T_mean_up*1e3',     r'$T_\mathrm{Sample}$ (mK)'],
+                'T_up_K':           ['self.T_mean_up*1e0',     r'$T_\mathrm{Sample}$ (K)'],
+                'T_axis_up_K':      ['self.T_axis',            r'$T_\mathrm{Sample}^\rightarrow$ (K)'],
+                'T_axis_down_K':    ['self.T_axis',            r'$T_\mathrm{Sample}^\leftarrow$ (K)'],
+                'dIdV_up':          ['self.dIdV_up',           r'd$I/$d$V$ ($G_0$)'],
+                'dIdV_up_T':        ['self.dIdV_up_T',         r'd$I/$d$V$ ($G_0$)'],
+                'dIdV_down':        ['self.dIdV_down',         r'd$I/$d$V$ ($G_0$)'],
+                'dIdV_down_T':      ['self.dIdV_down_T',       r'd$I/$d$V$ ($G_0$)'],
+                'uH_up_mT':         ['self.y_axis*1e3',        r'$\mu_0H^\rightarrow$ (mT)'],
+                'uH_up_T':          ['self.y_axis',            r'$\mu_0H^\rightarrow$ (T)'],
+                'uH_down_mT':       ['self.y_axis*1e3',        r'$\mu_0H^\leftarrow$ (mT)'],
+                'uH_down_T':        ['self.y_axis',            r'$\mu_0H^\leftarrow$ (T)'],
+                'uH_mT':            ['self.y_axis*1e3',        r'$\mu_0H$ (mT)'],
+                'uH_T':             ['self.y_axis',            r'$\mu_0H$ (T)'],
+                'V_gate_up_V':      ['self.y_axis',            r'$V_\mathrm{Gate}^\rightarrow$ (V)'],
+                'V_gate_down_V':    ['self.y_axis',            r'$V_\mathrm{Gate}^\leftarrow$ (V)'],
+                'V_gate_V':         ['self.y_axis',            r'$V_\mathrm{Gate}$ (V)'],
+                'V_gate_up_mV':     ['self.y_axis*1e3',        r'$V_\mathrm{Gate}^\rightarrow$ (mV)'],
+                'V_gate_down_mV':   ['self.y_axis*1e3',        r'$V_\mathrm{Gate}^\leftarrow$ (mV)'],
+                'V_gate_mV':        ['self.y_axis*1e3',        r'$V_\mathrm{Gate}$ (mV)'],
+                'time_up':          ['self.time_up',           r'time'],
+            } 
 
         logger.info('(%s) ... initialized.', self._name)
 
@@ -78,11 +119,10 @@ class EvaluationScript_v2():
         """
         logger.info('(%s) show_amplifications()', self._name)
 
-        file = File(f'{self.file_directory}{self.file_folder}{self.file_name}', 'r')
-        femto = file['status']['femto']
-        time = femto['time']
-        amp_A = femto['amp_A']
-        amp_B = femto['amp_B']
+        file = h5py.File(f'{self.file_directory}{self.file_folder}{self.file_name}', 'r')
+        time  = file['status']['femto']['time']
+        amp_A = file['status']['femto']['amp_A']
+        amp_B = file['status']['femto']['amp_B']
         fig = plt.figure(1000, figsize=(6,1))
         plt.semilogy(time, amp_A, '-',  label='V1_AMP')
         plt.semilogy(time, amp_B, '--', label='V2_AMP')
@@ -111,7 +151,7 @@ class EvaluationScript_v2():
         """
         logger.info('(%s) show_measurements()', self._name)
 
-        file = File(f'{self.file_directory}{self.file_folder}{self.file_name}', 'r')
+        file = h5py.File(f'{self.file_directory}{self.file_folder}{self.file_name}', 'r')
         liste = list(file['measurement'].keys())
         logger.info('(%s) %s', self._name, liste)
 
@@ -129,7 +169,7 @@ class EvaluationScript_v2():
         """
         logger.info("(%s) set_measurement('%s')", self._name, mkey)
         try: 
-            file = File(f'{self.file_directory}{self.file_folder}{self.file_name}', 'r')
+            file = h5py.File(f'{self.file_directory}{self.file_folder}{self.file_name}', 'r')
             self.keys = list(file['measurement'][mkey])
             self.mkey = mkey
         except KeyError:
@@ -173,6 +213,7 @@ class EvaluationScript_v2():
             parameters = self.indices[self.mkey]
 
         logger.info('(%s) set_keys(%s)', self._name, parameters)
+
         try:
             i0 = parameters[0]
             i1 = parameters[1]
@@ -188,7 +229,7 @@ class EvaluationScript_v2():
             logger.warning('(%s) Key to pop is not found.', self._name)
 
         y = []
-        for i, key in enumerate(self.keys):
+        for key in self.keys:
             temp = key[i0:i1]
             temp = float(temp) * norm
             y.append(temp)
@@ -201,7 +242,7 @@ class EvaluationScript_v2():
             V_abs:float = np.nan,
             V_min:float = np.nan,
             V_max:float = np.nan,
-            N_bins:int = np.nan,
+            V_bins:float = np.nan,
             ):
         """
         Sets V-axis. (Optional)
@@ -214,6 +255,8 @@ class EvaluationScript_v2():
             V_min, is minimum value on V-axis
         V_max : float
             V_min, is minimum value on V-axis
+        V_bins : float
+            Number of bins minus 1. (float, since default must be np.nan)
 
         """
         if not np.isnan(V_abs):
@@ -223,48 +266,65 @@ class EvaluationScript_v2():
             self.V_min = V_min
         if not np.isnan(V_max):
             self.V_max = V_max
-        if not np.isnan(N_bins):
-            self.N_bins = N_bins
-        print(f'Set V_min = {self.V_min}, V_max = {self.V_max} & N_bins = {self.N_bins}.')
-
-    def get_mapping_done(
-            self,
-    ):
-        print('Start with mapping. Progress:')
-        # Calculate new V-Axis
-        self.V = np.linspace(
+        if not np.isnan(V_bins):
+            self.V_bins = V_bins
+        
+        logger.info(
+            '(%s) set_V(%s, %s, %s)', 
+            self._name, 
             self.V_min, 
             self.V_max, 
-            int(self.N_bins)+1,
+            self.V_bins
             )
         
-        # Make shorter file name
-        if self.complete_file_name != '':
-            file = File(self.complete_file_name, 'r')
+    def get_maps(
+            self,
+    ):
+        """ get_maps()
+        - Calculate I and V and split in up / down sweep
+        - Maps I, dIdV, T over linear V-axis
+        - Also saves start and stop times
+        - As well as offsets
+        - sort by y-axis
+        """
+
+        logger.info('(%s) get_maps()', self._name)
+
+        # Calculate new V-Axis
+        self.V_axis = np.linspace(
+            self.V_min, 
+            self.V_max, 
+            int(self.V_bins)+1,
+            )
+        
+        # Access File
+        try:
+            file = h5py.File(f'{self.file_directory}{self.file_folder}{self.file_name}', 'r')
             f_keyed = file["measurement"][self.mkey]
-        else:
-            warnings.warn('no file yet!')
+        except AttributeError:
+            logger.error('(%s) File can not be found!', self._name)
+            return
+        except KeyError:
+            logger.error('(%s) MEasurement can not be found!', self._name)
             return
 
-        len_V = np.shape(self.V)[0]
+        len_V = np.shape(self.V_axis)[0]
         len_y = np.shape(self.y_unsorted)[0]
 
         # Initialize all values
-        self.I_up = np.full((len_y, len_V), np.nan, dtype='float64')
-        self.I_down = np.full((len_y, len_V), np.nan, dtype='float64')
-        self.time_up = np.full((len_y, len_V), np.nan, dtype='float64')
-        self.time_down = np.full((len_y, len_V), np.nan, dtype='float64')
-        self.T_all_up = np.full((len_y, len_V), np.nan, dtype='float64')
-        self.T_all_down = np.full((len_y, len_V), np.nan, dtype='float64')
+        self.I_up         = np.full((len_y, len_V), np.nan, dtype='float64')
+        self.I_down       = np.full((len_y, len_V), np.nan, dtype='float64')
+        self.time_up      = np.full((len_y, len_V), np.nan, dtype='float64')
+        self.time_down    = np.full((len_y, len_V), np.nan, dtype='float64')
+        self.T_all_up     = np.full((len_y, len_V), np.nan, dtype='float64')
+        self.T_all_down   = np.full((len_y, len_V), np.nan, dtype='float64')
         
-        self.t_up_start = np.full(len_y, np.nan, dtype='float64')
-        self.t_up_stop = np.full(len_y, np.nan, dtype='float64')
+        self.t_up_start   = np.full(len_y, np.nan, dtype='float64')
+        self.t_up_stop    = np.full(len_y, np.nan, dtype='float64')
         self.t_down_start = np.full(len_y, np.nan, dtype='float64')
-        self.t_down_stop = np.full(len_y, np.nan, dtype='float64')
-        self.T_up   = np.full(len_y, np.nan, dtype='float64')
-        self.T_down = np.full(len_y, np.nan, dtype='float64')
-        self.off_V1 = np.full(len_y, np.nan, dtype='float64')
-        self.off_V2 = np.full(len_y, np.nan, dtype='float64')
+        self.t_down_stop  = np.full(len_y, np.nan, dtype='float64')
+        self.off_V1       = np.full(len_y, np.nan, dtype='float64')
+        self.off_V2       = np.full(len_y, np.nan, dtype='float64')
     
         # Iterate over Keys
         for i, k in enumerate(tqdm(self.keys)):
@@ -306,10 +366,10 @@ class EvaluationScript_v2():
             self.t_down_stop[i]  = t_down[-1]
 
             # Bin that stuff
-            i_up, _   = bin_y_over_x(v_raw_up,   i_raw_up,   self.V)
-            i_down, _ = bin_y_over_x(v_raw_down, i_raw_down, self.V)
-            time_up, _   = bin_y_over_x(v_raw_up,   t_up,    self.V)
-            time_down, _ = bin_y_over_x(v_raw_down, t_down,  self.V)
+            i_up, _   = bin_y_over_x(v_raw_up,   i_raw_up,   self.V_axis)
+            i_down, _ = bin_y_over_x(v_raw_down, i_raw_down, self.V_axis)
+            time_up, _   = bin_y_over_x(v_raw_up,   t_up,    self.V_axis)
+            time_down, _ = bin_y_over_x(v_raw_down, t_down,  self.V_axis)
 
             # Save to Array
             self.I_up[i,:]   = i_up
@@ -333,125 +393,218 @@ class EvaluationScript_v2():
                 self.T_all_down[i,:] = T_down
 
         # sorting afterwards, because of probably unknown characters in keys
-        indices = np.argsort(self.y_unsorted)
-        self.y_sorted = self.y_unsorted[indices]
-        self.t_up_start = self.t_up_start[indices]
-        self.t_up_stop = self.t_up_stop[indices]
-        self.t_down_start = self.t_down_start[indices]
-        self.t_down_stop = self.t_down_stop[indices]
-        self.off_V1 = self.off_V1[indices]
-        self.off_V2 = self.off_V2[indices]
+        indices           = np.argsort(self.y_unsorted)
+        self.y_axis       = self.y_unsorted[indices]
 
-        self.I_up = self.I_up[indices,:]
-        self.I_down = self.I_down[indices,:]
-        self.time_up = self.time_up[indices,:]
-        self.time_down = self.time_down[indices,:]
-        self.T_all_up = self.T_all_up[indices,:]
-        self.T_all_down = self.T_all_down[indices,:]
+        self.I_up         = self.I_up[indices,:]
+        self.I_down       = self.I_down[indices,:]
+        self.time_up      = self.time_up[indices,:]
+        self.time_down    = self.time_down[indices,:]
+        self.T_all_up     = self.T_all_up[indices,:]
+        self.T_all_down   = self.T_all_down[indices,:]
+        
+        self.t_up_start   = self.t_up_start[indices]
+        self.t_up_stop    = self.t_up_stop[indices]
+        self.t_down_start = self.t_down_start[indices]
+        self.t_down_stop  = self.t_down_stop[indices]
+        self.off_V1       = self.off_V1[indices]
+        self.off_V2       = self.off_V2[indices]
 
         # calculating differential conductance
-        self.dIdV_up   = np.gradient(self.I_up,   self.V, axis=1)/self.G_0
-        self.dIdV_down = np.gradient(self.I_down, self.V, axis=1)/self.G_0
+        self.dIdV_up   = np.gradient(self.I_up,   self.V_axis, axis=1)/self.G_0
+        self.dIdV_down = np.gradient(self.I_down, self.V_axis, axis=1)/self.G_0
 
-        # calculates self.T_up, self.T_down
-        self.T_up   = np.nanmean(self.T_all_up,   axis=1)
-        self.T_down = np.nanmean(self.T_all_down, axis=1)
+        # calculates self.T_mean_up, self.T_mean_down
+        self.T_mean_up   = np.nanmean(self.T_all_up,   axis=1)
+        self.T_mean_down = np.nanmean(self.T_all_down, axis=1)
 
-    def map_over_T(
+    def set_T(
             self,
-            T_min = 0,
-            T_max = 2,
-            N_bins = 2000+1,
-    ):
-        self.T_binned = np.linspace(T_min, T_max, N_bins)
-        self.I_up_T, self.counter_up     = bin_z_over_y(self.T_up,   self.I_up,   self.T_binned)
-        self.I_down_T, self.counter_down = bin_z_over_y(self.T_down, self.I_down, self.T_binned)
-        self.dIdV_up_T,   _ = bin_z_over_y(self.T_up,   self.dIdV_up,   self.T_binned)
-        self.dIdV_down_T, _ = bin_z_over_y(self.T_down, self.dIdV_down, self.T_binned)
-        print('Mapping over T.')
+            T_min:float = np.nan,
+            T_max:float = np.nan,
+            T_bins:float = np.nan,
+            ):
+        """
+        Sets T-axis. (Optional)
+
+        Parameters
+        ----------
+        T_min : float
+            T_min, is minimum value on V-axis
+        T_max : float
+            T_max, is minimum value on V-axis
+        T_bins : float
+            Number of bins minus 1. (float, since default must be np.nan)
+
+        """
+        if not np.isnan(T_min):
+            self.T_min = T_min
+        if not np.isnan(T_max):
+            self.T_max = T_max
+        if not np.isnan(T_bins):
+            self.T_bins = T_bins
+        
+        logger.info(
+            '(%s) set_T(%s, %s, %s)', 
+            self._name, 
+            self.T_min, 
+            self.T_max, 
+            self.T_bins,
+            )
+
+    def get_maps_T(
+            self,
+        ):
+        """ get_maps_T()
+        - Maps I, dIdV over linear T-axis
+        """
+        logger.info('(%s) get_maps_T()', self._name)
+
+        # Calculate new V-Axis
+        self.T_axis = np.linspace(
+            self.T_min, 
+            self.T_max, 
+            int(self.T_bins)+1,
+            )
+        
+        self.I_up_T, self.counter_up     = bin_z_over_y(self.T_mean_up,   self.I_up,   self.T_axis)
+        self.I_down_T, self.counter_down = bin_z_over_y(self.T_mean_down, self.I_down, self.T_axis)
+        self.dIdV_up_T,   _ = bin_z_over_y(self.T_mean_up,   self.dIdV_up,   self.T_axis)
+        self.dIdV_down_T, _ = bin_z_over_y(self.T_mean_down, self.dIdV_down, self.T_axis)
 
     def show_map(
             self,
-            x_key,
-            y_key,
-            z_key,
-            x_lim = None,
-            y_lim = None,
-            z_lim = None,
-            contrast = 1,
-    ):  
-        self.plot_keys = {
-                'V_bias_up_muV':    [self.V*1e6,        r'$V_\mathrm{Bias}^\rightarrow$ (µV)'],
-                'V_bias_up_mV':     [self.V*1e3,        r'$V_\mathrm{Bias}^\rightarrow$ (mV)'],
-                'V_bias_up_V':      [self.V*1e0,        r'$V_\mathrm{Bias}^\rightarrow$ (V)'],
-                'V_bias_down_muV':  [self.V*1e6,        r'$V_\mathrm{Bias}^\leftarrow$ (µV)'],
-                'V_bias_down_mV':   [self.V*1e3,        r'$V_\mathrm{Bias}^\leftarrow$ (mV)'],
-                'V_bias_down_V':    [self.V*1e0,        r'$V_\mathrm{Bias}^\leftarrow$ (V)'],
-                'heater_power_muW': [self.y_sorted*1e6, r'$P_\mathrm{Heater}$ (µW)'],
-                'heater_power_mW':  [self.y_sorted*1e3, r'$P_\mathrm{Heater}$ (mW)'],
-                'T_all_up_mK':      [self.T_all_up*1e3, r'$T_{Sample}$ (mK)'],
-                'T_all_up_K':       [self.T_all_up*1e0, r'$T_{Sample}$ (K)'],
-                'T_up_mK':          [self.T_up*1e3,     r'$T_\mathrm{Sample}$ (mK)'],
-                'T_up_K':           [self.T_up*1e0,     r'$T_\mathrm{Sample}$ (K)'],
-                'T_binned_up_K':    [self.T_binned,     r'$T_\mathrm{Sample}^\rightarrow$ (K)'],
-                'T_binned_down_K':  [self.T_binned,     r'$T_\mathrm{Sample}^\leftarrow$ (K)'],
-                'dIdV_up':          [self.dIdV_up,      r'd$I/$d$V$ ($G_0$)'],
-                'dIdV_up_T':        [self.dIdV_up_T,    r'd$I/$d$V$ ($G_0$)'],
-                'dIdV_down':        [self.dIdV_down,    r'd$I/$d$V$ ($G_0$)'],
-                'dIdV_down_T':      [self.dIdV_down_T,  r'd$I/$d$V$ ($G_0$)'],
-                'uH_up_mT':         [self.y_sorted*1e3, r'$\mu_0H^\rightarrow$ (mT)'],
-                'uH_up_T':          [self.y_sorted,     r'$\mu_0H^\rightarrow$ (T)'],
-                'uH_down_mT':       [self.y_sorted*1e3, r'$\mu_0H^\leftarrow$ (mT)'],
-                'uH_down_T':        [self.y_sorted,     r'$\mu_0H^\leftarrow$ (T)'],
-                'uH_mT':            [self.y_sorted*1e3, r'$\mu_0H$ (mT)'],
-                'uH_T':             [self.y_sorted,     r'$\mu_0H$ (T)'],
-                'V_gate_up_V':      [self.y_sorted,     r'$V_\mathrm{Gate}^\rightarrow$ (V)'],
-                'V_gate_down_V':    [self.y_sorted,     r'$V_\mathrm{Gate}^\leftarrow$ (V)'],
-                'V_gate_V':         [self.y_sorted,     r'$V_\mathrm{Gate}$ (V)'],
-                'V_gate_up_mV':     [self.y_sorted*1e3, r'$V_\mathrm{Gate}^\rightarrow$ (mV)'],
-                'V_gate_down_mV':   [self.y_sorted*1e3, r'$V_\mathrm{Gate}^\leftarrow$ (mV)'],
-                'V_gate_mV':        [self.y_sorted*1e3, r'$V_\mathrm{Gate}$ (mV)'],
-                'time_up':          [self.time_up,      r'time'],
-            }        
+            x_key:str = 'V_bias_up_mV',
+            y_key:str = 'y_axis',
+            z_key:str = 'dIdV_up',
+            x_lim:list = [np.nan, np.nan],
+            y_lim:list = [np.nan, np.nan],
+            z_lim:list = [np.nan, np.nan],
+    ):         
+        """ show_map()
+        - checks for synthax errors
+        - get data and label from plot_keys
+        - calls plot_map()
+
+        Parameters
+        ----------
+        x_key : str = 'V_bias_up_mV'
+            select plot_key_x from self.plot_keys
+        y_key : str = 'y_axis'
+            select plot_key_y from self.plot_keys
+        z_key : str = 'dIdV_up'
+            select plot_key_z from self.plot_keys
+        x_lim : list = [np.nan, np.nan]
+            sets limits on x-Axis
+        y_lim : list = [np.nan, np.nan]
+            sets limits on y-Axis
+        z_lim : list = [np.nan, np.nan]
+            sets limits on z-Axis / colorbar
+        """
+
+        if x_lim == [np.nan, np.nan]:
+            x_lim = self.x_lim
+        if y_lim == [np.nan, np.nan]:
+            y_lim = self.y_lim
+        if z_lim == [np.nan, np.nan]:
+            z_lim = self.z_lim
+
+        logger.warn("(%s) show_map('%s', '%s', '%s', %s, %s, %s)", self._name, x_key, y_key, z_key, x_lim, y_lim, z_lim)
+
+        warning = False
+
+        if x_lim[0] >= x_lim[1]:
+            logger.warn('(%s) x_lim = [lower_limit, upper_limit].', self._name)
+            warning = True
+
+        if y_lim[0] >= y_lim[1]:
+            logger.warn('(%s) y_lim = [lower_limit, upper_limit].', self._name)
+            warning = True
+
+        if z_lim[0] >= z_lim[1]:
+            logger.warn('(%s) z_lim = [lower_limit, upper_limit].', self._name)
+            warning = True
 
         try:
-            self.x = self.plot_keys[x_key][0]
-            self.y = self.plot_keys[y_key][0]
-            self.z = self.plot_keys[z_key][0]
+            plot_key_x = self.plot_keys[x_key]
+        except KeyError:
+            logger.warn('(%s) x_key not found.', self._name)
+            warning = True
 
-            self.x_label = self.plot_keys[x_key][1]
-            self.y_label = self.plot_keys[y_key][1]
-            self.z_label = self.plot_keys[z_key][1]
+        try:
+            plot_key_y = self.plot_keys[y_key]
+        except KeyError:
+            logger.warn('(%s) y_key not found.', self._name)
+            warning = True
+
+        try:
+            plot_key_z = self.plot_keys[z_key]
+        except KeyError:
+            logger.warn('(%s) z_key not found.', self._name)
+            warning = True
+
+        if not warning:
+            try:
+                x_data = eval(plot_key_x[0])
+                y_data = eval(plot_key_y[0])
+                z_data = eval(plot_key_z[0])
+            except AttributeError:
+                logger.warn('(%s) Required data not found. Check if data is calculated and plot_keys!', self._name)
+                return
+
+            x_label = plot_key_x[1]
+            y_label = plot_key_y[1]
+            z_label = plot_key_z[1]
+
+            self.x_label = x_label
+            self.y_label = y_label
+            self.z_label = z_label
+
+            self.x_lim = x_lim
+            self.y_lim = y_lim
+            self.z_lim = z_lim
 
             self.x_key = x_key
             self.y_key = y_key
             self.z_key = z_key
 
-            self.x_lim = x_lim
-            self.y_lim = y_lim
-            self.z_lim = z_lim
-        except KeyError:
-            print('Key not found. Choose from:')
-            for key in self.plot_keys.keys():
-                print(f"'{key}")
-            return
-
-
+        else:
+            logger.warn('(%s) Check Parameter!', self._name)
+            try:
+                image = Image.open("/home/oliver/Documents/p5control-bluefors-evaluation/utilities/blueforslogo.png", mode='r')
+            except FileNotFoundError:
+                logger.warn('(%s) Trick verreckt :/', self._name)
+                return
+            image = np.asarray(image, dtype='float64')
+            z_data = np.flip(image[:,:,1], axis=0)
+            z_data[z_data >= 80] = .8
+            z_data /= np.max(z_data)
+            x_data = np.arange(image.shape[1])
+            y_data = np.arange(image.shape[0])
+            x_label = r'$x_\mathrm{}$ (pxl)'
+            y_label = r'$y_\mathrm{}$ (pxl)'
+            z_label = r'BlueFors (arb. u.)'
+            x_lim = [0., 2000.]
+            y_lim = [0., 1000.]
+            z_lim = [0., 1.]
+        
         fig, ax_z, ax_c, x, y, z, ext = plot_map(
-            x = self.x, 
-            y = self.y, 
-            z = self.z, 
-            x_lim = self.x_lim, 
-            y_lim = self.y_lim, 
-            z_lim = self.z_lim,
-            x_label = self.x_label, 
-            y_label = self.y_label,  
-            z_label = self.z_label, 
-            fig_nr = self.fig_nr,
-            cmap = self.cmap,
-            display_dpi = self.display_dpi,
-            contrast = self.contrast,
-            )
+                x = x_data, 
+                y = y_data, 
+                z = z_data, 
+                x_lim = x_lim, 
+                y_lim = y_lim, 
+                z_lim = z_lim,
+                x_label = x_label, 
+                y_label = y_label,  
+                z_label = z_label, 
+                fig_nr = self.fig_nr,
+                cmap = self.cmap,
+                display_dpi = self.display_dpi,
+                contrast = self.contrast,
+                )
+        
+        
         self.fig = fig
         self.ax_z = ax_z
         self.ax_c = ax_c
@@ -460,42 +613,49 @@ class EvaluationScript_v2():
         self.z = z
         self.ext = ext
 
-        if self.title is not None:
+        if warning:
+            plt.suptitle('Hier könnte ihre Werbung stehen.')
+        elif self.title is not None:
             plt.suptitle(self.title)
         else:
             plt.suptitle(self.mkey)
 
     def save_figure(
         self,
-        ):
-        # Handle figure folder
-        check = os.path.isdir(self.fig_folder)
-        if not check:
-            os.makedirs(self.fig_folder)
+        ): 
+        """ show_map()
+        - safes Figure to self.fig_folder/self.title
+        """
+        logger.info("(%s) save_figure() to %s%s.png", self._name, self.fig_folder, self.title)
 
         # Handle Title
         title = f"{self.title}"
 
-        # Save Everything
+        # Handle figure folder
+        check = os.path.isdir(self.fig_folder)
+        if not check and self.fig_folder != '':
+            os.makedirs(self.fig_folder)
         name = os.path.join(os.getcwd(), self.fig_folder, title)
+
+        # Save Everything
         self.fig.savefig(f'{name}.png', dpi=self.png_dpi)
         if self.pdf: # save as pdf
+            logger.info("(%s) save_figure() to %s%s.pdf", self._name, self.fig_folder, self.title)
             self.fig.savefig(f'{name}.pdf', dpi=self.pdf_dpi)
-        print(f"Figure is saved under: {self.fig_folder}/{title}.png")
 
 
-    def get_dict_keys(self):   
-        ignore = ['fig', 'ax_z', 'ax_c', 'cmap']
-        keys = []
-        for key in self.__dict__.keys():
-            if key not in ignore:
-                keys.append(key)
-        return keys
+    # def get_dict_keys(self):   
+    #     ignore = ['fig', 'ax_z', 'ax_c', 'cmap']
+    #     keys = []
+    #     for key in self.__dict__.keys():
+    #         if key not in ignore:
+    #             keys.append(key)
+    #     return keys
 
-    def get_keys(self):
-        key = 'self.'+key
-        dict_keys = self.get_dict_keys()
-        dictionary = {}
-        for key in dict_keys:
-            dictionary[key] = globals()[key]
-        return dictionary
+    # def get_keys(self):
+    #     key = 'self.'+self.key
+    #     dict_keys = self.get_dict_keys()
+    #     dictionary = {}
+    #     for key in dict_keys:
+    #         dictionary[key] = globals()[key]
+    #     return dictionary
