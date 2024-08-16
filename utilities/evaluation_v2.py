@@ -111,13 +111,13 @@ class EvaluationScript_v2():
 
         logger.info('(%s) ... initialized.', self._name)
 
-    def show_amplifications(
+    def showAmplifications(
             self,
             ):
         """
         Shows amplification over time during whole measurement.
         """
-        logger.info('(%s) show_amplifications()', self._name)
+        logger.info('(%s) showAmplifications()', self._name)
 
         file = h5py.File(f'{self.file_directory}{self.file_folder}{self.file_name}', 'r')
         time  = file['status']['femto']['time']
@@ -133,7 +133,7 @@ class EvaluationScript_v2():
 
         # TODO: implement datetime, probably two axes
 
-    def set_amplifications(
+    def setAmplifications(
             self, 
             V1_AMP:float, 
             V2_AMP:float,
@@ -141,21 +141,21 @@ class EvaluationScript_v2():
         """
         Sets Amplifications for Calculations.
         """
-        logger.info('(%s) set_amplifications(%s, %s)', self._name, V1_AMP, V2_AMP)
+        logger.info('(%s) setAmplifications(%s, %s)', self._name, V1_AMP, V2_AMP)
         self.V1_AMP = V1_AMP
         self.V2_AMP = V2_AMP
     
-    def show_measurements(self):
+    def showMeasurements(self):
         """
         Shows available Measurements in File.
         """
-        logger.info('(%s) show_measurements()', self._name)
+        logger.info('(%s) showMeasurements()', self._name)
 
         file = h5py.File(f'{self.file_directory}{self.file_folder}{self.file_name}', 'r')
         liste = list(file['measurement'].keys())
         logger.info('(%s) %s', self._name, liste)
 
-    def set_measurement(
+    def setMeasurement(
             self, 
             mkey:str
             ):
@@ -167,7 +167,7 @@ class EvaluationScript_v2():
         mkey : str
             name of measurement
         """
-        logger.info("(%s) set_measurement('%s')", self._name, mkey)
+        logger.info("(%s) setMeasurement('%s')", self._name, mkey)
         try: 
             file = h5py.File(f'{self.file_directory}{self.file_folder}{self.file_name}', 'r')
             self.keys = list(file['measurement'][mkey])
@@ -177,17 +177,17 @@ class EvaluationScript_v2():
             self.mkey = ''
             logger.error("(%s) '%s' found in File.", self._name, mkey)
 
-    def show_keys(
+    def showKeys(
             self
             ):
         """
         Shows available Keys in Measurement.
         """
-        logger.info('(%s) show_keys()', self._name)
+        logger.info('(%s) showKeys()', self._name)
         show_keys = self.keys[:2] + self.keys[-2:]
         logger.info('(%s) %s', self._name, show_keys)
         
-    def set_keys(
+    def setKeys(
             self,
             parameters = None,
             ):
@@ -206,13 +206,13 @@ class EvaluationScript_v2():
 
         """
         if self.mkey == '':
-            logger.warning('(%s) Do set_measurement() first.', self._name)
+            logger.warning('(%s) Do setMeasurement() first.', self._name)
             return
 
         if parameters is None:
             parameters = self.indices[self.mkey]
 
-        logger.info('(%s) set_keys(%s)', self._name, parameters)
+        logger.info('(%s) setKeys(%s)', self._name, parameters)
 
         try:
             i0 = parameters[0]
@@ -237,7 +237,7 @@ class EvaluationScript_v2():
 
         self.y_unsorted = y
 
-    def set_V(
+    def setV(
             self,
             V_abs:float = np.nan,
             V_min:float = np.nan,
@@ -270,17 +270,17 @@ class EvaluationScript_v2():
             self.V_bins = V_bins
         
         logger.info(
-            '(%s) set_V(%s, %s, %s)', 
+            '(%s) setV(%s, %s, %s)', 
             self._name, 
             self.V_min, 
             self.V_max, 
             self.V_bins
             )
         
-    def get_maps(
+    def getMaps(
             self,
     ):
-        """ get_maps()
+        """ getMaps()
         - Calculate I and V and split in up / down sweep
         - Maps I, dIdV, T over linear V-axis
         - Also saves start and stop times
@@ -288,7 +288,7 @@ class EvaluationScript_v2():
         - sort by y-axis
         """
 
-        logger.info('(%s) get_maps()', self._name)
+        logger.info('(%s) getMaps()', self._name)
 
         # Calculate new V-Axis
         self.V_axis = np.linspace(
@@ -418,7 +418,7 @@ class EvaluationScript_v2():
         self.T_mean_up   = np.nanmean(self.T_all_up,   axis=1)
         self.T_mean_down = np.nanmean(self.T_all_down, axis=1)
 
-    def set_T(
+    def setT(
             self,
             T_min:float = np.nan,
             T_max:float = np.nan,
@@ -445,20 +445,20 @@ class EvaluationScript_v2():
             self.T_bins = T_bins
         
         logger.info(
-            '(%s) set_T(%s, %s, %s)', 
+            '(%s) setT(%s, %s, %s)', 
             self._name, 
             self.T_min, 
             self.T_max, 
             self.T_bins,
             )
 
-    def get_maps_T(
+    def getMapsT(
             self,
         ):
-        """ get_maps_T()
+        """ getMapsT()
         - Maps I, dIdV over linear T-axis
         """
-        logger.info('(%s) get_maps_T()', self._name)
+        logger.info('(%s) getMapsT()', self._name)
 
         # Calculate new V-Axis
         self.T_axis = np.linspace(
@@ -472,7 +472,7 @@ class EvaluationScript_v2():
         self.dIdV_up_T,   _ = bin_z_over_y(self.T_mean_up,   self.dIdV_up,   self.T_axis)
         self.dIdV_down_T, _ = bin_z_over_y(self.T_mean_down, self.dIdV_down, self.T_axis)
 
-    def show_map(
+    def showMap(
             self,
             x_key:str = 'V_bias_up_mV',
             y_key:str = 'y_axis',
@@ -481,7 +481,7 @@ class EvaluationScript_v2():
             y_lim:list = [np.nan, np.nan],
             z_lim:list = [np.nan, np.nan],
     ):         
-        """ show_map()
+        """ showMap()
         - checks for synthax errors
         - get data and label from plot_keys
         - calls plot_map()
@@ -509,7 +509,7 @@ class EvaluationScript_v2():
         if z_lim == [np.nan, np.nan]:
             z_lim = self.z_lim
 
-        logger.warn("(%s) show_map('%s', '%s', '%s', %s, %s, %s)", self._name, x_key, y_key, z_key, x_lim, y_lim, z_lim)
+        logger.info("(%s) showMap('%s', '%s', '%s', %s, %s, %s)", self._name, x_key, y_key, z_key, x_lim, y_lim, z_lim)
 
         warning = False
 
@@ -620,13 +620,13 @@ class EvaluationScript_v2():
         else:
             plt.suptitle(self.mkey)
 
-    def save_figure(
+    def saveFigure(
         self,
         ): 
-        """ show_map()
+        """ saveFigure()
         - safes Figure to self.fig_folder/self.title
         """
-        logger.info("(%s) save_figure() to %s%s.png", self._name, self.fig_folder, self.title)
+        logger.info("(%s) saveFigure() to %s%s.png", self._name, self.fig_folder, self.title)
 
         # Handle Title
         title = f"{self.title}"
@@ -640,7 +640,7 @@ class EvaluationScript_v2():
         # Save Everything
         self.fig.savefig(f'{name}.png', dpi=self.png_dpi)
         if self.pdf: # save as pdf
-            logger.info("(%s) save_figure() to %s%s.pdf", self._name, self.fig_folder, self.title)
+            logger.info("(%s) saveFigure() to %s%s.pdf", self._name, self.fig_folder, self.title)
             self.fig.savefig(f'{name}.pdf', dpi=self.pdf_dpi)
 
 
