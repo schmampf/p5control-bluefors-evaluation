@@ -1,136 +1,34 @@
 import numpy as np
-from tqdm import tqdm
-from torch.nn import Upsample
-from torch import from_numpy
-
-from  h5py import File
 import matplotlib.pyplot as plt
-from datetime import datetime
 
 import warnings, os, platform
 
+from tqdm import tqdm
+from  h5py import File
+
 from .corporate_design_colors_v4 import cmap
+from .evaluation_helper_v2 import *
 
-"""
-Pre-Definition of Functions
-"""
-
-def linfit(x):
-    # time binned over voltage is not equally spaced and might have nans
-    # this function does a linear fit to uneven spaced array, that might contain nans
-    # gives back linear and even spaced array
-    nu_x = np.copy(x)
-    nans = np.isnan(x)
-    not_nans = np.invert(nans)
-    xx = np.arange(np.shape(nu_x)[0])
-    poly = np.polyfit(xx[not_nans], 
-                      nu_x[not_nans], 1)
-    fit_x = xx * poly[0] + poly[1]
-    return fit_x
-
-
-def bin_y_over_x(
-            x, 
-            y,
-            x_bins,
-            upsampling=None,
-        ):
-        # gives y-values over even-spaced and monoton-increasing x
-        # incase of big gaps in y-data, use upsampling, to fill those.
-        if upsampling is not None:
-            k = np.full((2, len(x)), np.nan)
-            k[0,:] = x
-            k[1,:] = y
-            m = Upsample(mode='linear', scale_factor=upsampling)
-            big = m(from_numpy(np.array([k])))
-            x = np.array(big[0,0,:])
-            y = np.array(big[0,1,:])
-        else:
-            pass
-
-        # Apply binning based on histogram function
-        x_nu = np.append(x_bins, 2*x_bins[-1]-x_bins[-2])
-        x_nu = x_nu - (x_nu[1] - x_nu[0])/2
-            # Instead of N_x, gives fixed axis.
-            # Solves issues with wider ranges, than covered by data
-        _count, _ = np.histogram(x,
-                                bins = x_nu,
-                                weights=None)
-        _count = np.array(_count, dtype='float64')
-        _count[_count==0] = np.nan
-
-        _sum, _ = np.histogram(x,
-                            bins = x_nu,
-                            weights = y)    
-        return _sum/_count, _count
-
-def bin_z_over_y(
-        y,
-        z,
-        y_binned,
-        ):
-    N_bins = np.shape(y_binned)[0]
-    counter = np.full(N_bins, 0)
-    result  = np.full((N_bins, np.shape(z)[1]), 0, dtype='float64')
-    
-    # Find Indizes of x on x_binned
-    dig = np.digitize(y, bins=y_binned)
-
-    # Add up counter, I & dIdV
-    for i, d in enumerate(dig):
-        counter[d-1]   += 1
-        result[d-1,:]  += z[i,:]
-    
-    # Normalize with counter, rest to np.nan
-    for i,c in enumerate(counter):
-        if c > 0:
-            result[i,:] /= c
-        elif c== 0:
-            result[i,:] *= np.nan
-    
-    
-    # Fill up Empty lines with Neighboring Lines
-    for i,c in enumerate(counter):
-        if c == 0: # In case counter is 0, we need to fill up
-            up, down = i, i # initialze up, down
-            while counter[up] == 0 and up < N_bins - 1: 
-                # while up is still smaller -2 and counter is still zero, look for better up
-                up += 1
-            while counter[down] == 0 and down >= 1: 
-                # while down is still bigger or equal 1 and coutner still zero, look for better down
-                down -= 1
-
-            if up == N_bins - 1 or down == 0:
-                # Just ignores the edges, when c == 0
-                result[i,:] *= np.nan
-            else:
-                # Get Coordinate System
-                span = up - down
-                relative_pos = i - down
-                lower_span = span * .25
-                upper_span = span * .75
-
-                # Divide in same as next one and intermediate
-                if 0 <= relative_pos <= lower_span:
-                    result[i,:] =result[down,:]
-                elif lower_span < relative_pos < upper_span:
-                    result[i,:] = (result[up,:] +result[down,:]) / 2
-                elif upper_span <= relative_pos <= span:
-                    result[i,:] =result[up,:]
-                else:
-                    warnings.warn('something went wrong!')
-    return result, counter
+import logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 class EvaluationScript_v2():
-    def __init__(self):
-        
+    def __init__(
+            self,
+            name = 'eva',
+            ):
+        self._name = name
+
         system = platform.system()
         if system == 'Darwin':
-            self.file_directory = '/Users/oliver/Documents/measurement_data/24 07 OI-24d-10/unbroken/'
+            self.file_directory = '/Users/oliver/Documents/measurement_data/'
         elif system == 'Linux':
-            self.file_directory = '/home/oliver/Documents/measurement_data/24 07 OI-24d-10/unbroken/'
+            self.file_directory = '/home/oliver/Documents/measurement_data/'
         else:
-            warnings.warn(f'{system} needs a user path')
+            logger.warning(f'{system} needs a user path')
+            self.file_directory = './'
+
         self.file_name = ''
         self.file_folder = ''
         self.mkey = ''
@@ -152,106 +50,172 @@ class EvaluationScript_v2():
 
         self.title = ''
         self.fig_nr = 0
-        self.dpi = 300
+        self.display_dpi = 100
+        self.png_dpi = 600
+        self.pdf_dpi = 600
         self.pdf = False
-        self.cmap = 'viridis'
         self.cmap = cmap(color='seeblau', bad='gray')
         self.fig_folder = 'figures'
+        self.contrast = 1
 
         self.indices = {
             'temperatures': [7, -3, 1e-6, 'no_heater'],
             'temperatures_up': [7, -2, 1e-6, 'no_heater'],
         }
-    
-    def show_measurements(self):
+        self.T_binned    = np.zeros(2000)
+        self.I_up_T      = np.zeros(2000)
+        self.I_down_T    = np.zeros(2000)
+        self.dIdV_up_T   = np.zeros(2000)
+        self.dIdV_down_T = np.zeros(2000)
+
+        logger.info('(%s) ... initialized.', self._name)
+
+    def show_amplifications(
+            self,
+            ):
+        """
+        Shows amplification over time during whole measurement.
+        """
+        logger.info('(%s) show_amplifications()', self._name)
+
         file = File(f'{self.file_directory}{self.file_folder}{self.file_name}', 'r')
-        print('Available Measurements:')
-        liste = list(file['measurement'].keys())
-        for li in liste:
-            print(f"'{li}'")
+        femto = file['status']['femto']
+        time = femto['time']
+        amp_A = femto['amp_A']
+        amp_B = femto['amp_B']
+        fig = plt.figure(1000, figsize=(6,1))
+        plt.semilogy(time, amp_A, '-',  label='V1_AMP')
+        plt.semilogy(time, amp_B, '--', label='V2_AMP')
+        plt.legend()
+        plt.title('Femto Amplifications according to Status')
+        plt.xlabel('time')
+        plt.ylabel('Amplification')
 
-    def set_measurement(self, mkey:str):
-        try: 
-            self.mkey = mkey
-            self.complete_file_name = f'{self.file_directory}{self.file_folder}{self.file_name}'
-            file = File(self.complete_file_name, 'r')
-            self.keys = list(file['measurement'][self.mkey])
-            print(f"Measurement: '{mkey}'")
-        except KeyError:
-            self.mkey = ''
-            self.complete_file_name = ''
-            self.keys = []
-
-            print("ERROR: No such measurement.")
-
-    def show_amplifications(self):
-        if self.complete_file_name != '':
-            print('Showing Femto Amplifications according to Status below.')
-            file = File(self.complete_file_name, 'r')
-            femto = file['status']['femto']
-            time = femto['time']
-            amp_A = femto['amp_A']
-            amp_B = femto['amp_B']
-            fig = plt.figure(1000, figsize=(6,2))
-            plt.semilogy(time, amp_A, '-',  label='V1_AMP')
-            plt.semilogy(time, amp_B, '--', label='V2_AMP')
-            plt.legend()
-            plt.title('Femto Amplifications according to Status')
-            plt.xlabel('time')
-            plt.ylabel('Amplification')
-
-            print('TODO: implement datetime, probably two axes')
+        # TODO: implement datetime, probably two axes
 
     def set_amplifications(
             self, 
             V1_AMP:float, 
-            V2_AMP:float
+            V2_AMP:float,
             ):
+        """
+        Sets Amplifications for Calculations.
+        """
+        logger.info('(%s) set_amplifications(%s, %s)', self._name, V1_AMP, V2_AMP)
         self.V1_AMP = V1_AMP
         self.V2_AMP = V2_AMP
-        print(f'Set Amplification to {self.V1_AMP} & {self.V2_AMP}.')
+    
+    def show_measurements(self):
+        """
+        Shows available Measurements in File.
+        """
+        logger.info('(%s) show_measurements()', self._name)
+
+        file = File(f'{self.file_directory}{self.file_folder}{self.file_name}', 'r')
+        liste = list(file['measurement'].keys())
+        logger.info('(%s) %s', self._name, liste)
+
+    def set_measurement(
+            self, 
+            mkey:str
+            ):
+        """
+        Sets Measurement Key. Mandatory for further Evaluation.
+
+        Parameters
+        ----------
+        mkey : str
+            name of measurement
+        """
+        logger.info("(%s) set_measurement('%s')", self._name, mkey)
+        try: 
+            file = File(f'{self.file_directory}{self.file_folder}{self.file_name}', 'r')
+            self.keys = list(file['measurement'][mkey])
+            self.mkey = mkey
+        except KeyError:
+            self.keys = []
+            self.mkey = ''
+            logger.error("(%s) '%s' found in File.", self._name, mkey)
 
     def show_keys(
             self
-    ):
-        print('Keys are for example: ')
-        print(self.keys[:4])
-        print(self.keys[:-5:-1])
-
-    def pop_key(
-            self,
-            to_pop:str,
-    ):
-        if len(self.keys) != 0:
-            self.keys.remove(to_pop) # Remove no_field etc.
-            print(f"Remove: '{to_pop}'.")
+            ):
+        """
+        Shows available Keys in Measurement.
+        """
+        logger.info('(%s) show_keys()', self._name)
+        show_keys = self.keys[:2] + self.keys[-2:]
+        logger.info('(%s) %s', self._name, show_keys)
         
-    def get_y(
+    def set_keys(
             self,
-            index=None,
-    ):
-        if index is None:
-            index = self.indices
-        if index[self.mkey][3] in self.keys:
-            self.keys.remove(index[self.mkey][3])
+            parameters = None,
+            ):
+        """
+        Sets Keys and calculate y_unsorted. Mandatory for further Evaluation.
+
+        Parameters
+        ----------
+        parameters : str
+            [
+            index of first y-value,
+            index of last y-value,
+            normalization for y-value,
+            key to pop,
+            ]
+
+        """
+        if self.mkey == '':
+            logger.warning('(%s) Do set_measurement() first.', self._name)
+            return
+
+        if parameters is None:
+            parameters = self.indices[self.mkey]
+
+        logger.info('(%s) set_keys(%s)', self._name, parameters)
+        try:
+            i0 = parameters[0]
+            i1 = parameters[1]
+            norm = parameters[2]
+            to_pop = parameters[3]
+        except IndexError:
+            logger.warning('(%s) List of Parameter is incompete.', self._name)
+            return
+        
+        if to_pop in self.keys:
+            self.keys.remove(to_pop)
+        else:
+            logger.warning('(%s) Key to pop is not found.', self._name)
 
         y = []
         for i, key in enumerate(self.keys):
-            temp = key[index[self.mkey][0]:index[self.mkey][1]]
-            temp = float(temp) * index[self.mkey][2]
+            temp = key[i0:i1]
+            temp = float(temp) * norm
             y.append(temp)
         y = np.array(y)
+
         self.y_unsorted = y
-        print('y-values are for example: ')
-        print(y[:8])
 
     def set_V(
             self,
-            V_abs = np.nan,
-            V_min = np.nan,
-            V_max = np.nan,
-            N_bins = np.nan,
+            V_abs:float = np.nan,
+            V_min:float = np.nan,
+            V_max:float = np.nan,
+            N_bins:int = np.nan,
             ):
+        """
+        Sets V-axis. (Optional)
+
+        Parameters
+        ----------
+        V_abs : float
+            V_min = -V_abs, V_max = +V_abs
+        V_min : float
+            V_min, is minimum value on V-axis
+        V_max : float
+            V_min, is minimum value on V-axis
+
+        """
         if not np.isnan(V_abs):
             V_min = -V_abs
             V_max = +V_abs
@@ -307,7 +271,11 @@ class EvaluationScript_v2():
             # Retrieve Datasets
             offset= f_keyed[k]["offset"]["adwin"]
             sweep = f_keyed[k]["sweep"]["adwin"]
-            temperature = f_keyed[k]["sweep"]["bluefors"]
+            if "bluefors" in f_keyed[k]["sweep"].keys():
+                temperature = f_keyed[k]["sweep"]["bluefors"]
+            else:
+                temperature = False
+                warnings.warn('no temperature data available')
 
             # Calculate Offsets
             self.off_V1[i] = np.nanmean(offset["V1"])
@@ -343,25 +311,26 @@ class EvaluationScript_v2():
             time_up, _   = bin_y_over_x(v_raw_up,   t_up,    self.V)
             time_down, _ = bin_y_over_x(v_raw_down, t_down,  self.V)
 
-            # Take care of time and Temperature
-            temp_t = temperature['time']
-            temp_T = temperature['Tsample']
-            temp_t_up   = linfit(time_up)
-            if temp_t_up[0] > temp_t_up[1]:
-                temp_t_up = np.flip(temp_t_up)
-            temp_t_down = linfit(time_down)
-            if temp_t_down[0] > temp_t_down[1]:
-                temp_t_down = np.flip(temp_t_down)
-            T_up, _   = bin_y_over_x(temp_t, temp_T, temp_t_up,   upsampling=1000)
-            T_down, _ = bin_y_over_x(temp_t, temp_T, temp_t_down, upsampling=1000)
-
             # Save to Array
             self.I_up[i,:]   = i_up
             self.I_down[i,:] = i_down
             self.time_up[i,:]   = time_up
             self.time_down[i,:] = time_down
-            self.T_all_up[i,:]   = T_up
-            self.T_all_down[i,:] = T_down
+
+            # Take care of time and Temperature
+            if temperature:
+                temp_t = temperature['time']
+                temp_T = temperature['Tsample']
+                temp_t_up   = linfit(time_up)
+                if temp_t_up[0] > temp_t_up[1]:
+                    temp_t_up = np.flip(temp_t_up)
+                temp_t_down = linfit(time_down)
+                if temp_t_down[0] > temp_t_down[1]:
+                    temp_t_down = np.flip(temp_t_down)
+                T_up, _   = bin_y_over_x(temp_t, temp_T, temp_t_up,   upsampling=1000)
+                T_down, _ = bin_y_over_x(temp_t, temp_T, temp_t_down, upsampling=1000)
+                self.T_all_up[i,:]   = T_up
+                self.T_all_down[i,:] = T_down
 
         # sorting afterwards, because of probably unknown characters in keys
         indices = np.argsort(self.y_unsorted)
@@ -411,8 +380,7 @@ class EvaluationScript_v2():
             z_lim = None,
             contrast = 1,
     ):  
-        try:
-            self.plot_keys = {
+        self.plot_keys = {
                 'V_bias_up_muV':    [self.V*1e6,        r'$V_\mathrm{Bias}^\rightarrow$ (µV)'],
                 'V_bias_up_mV':     [self.V*1e3,        r'$V_\mathrm{Bias}^\rightarrow$ (mV)'],
                 'V_bias_up_V':      [self.V*1e0,        r'$V_\mathrm{Bias}^\rightarrow$ (V)'],
@@ -431,101 +399,71 @@ class EvaluationScript_v2():
                 'dIdV_up_T':        [self.dIdV_up_T,    r'd$I/$d$V$ ($G_0$)'],
                 'dIdV_down':        [self.dIdV_down,    r'd$I/$d$V$ ($G_0$)'],
                 'dIdV_down_T':      [self.dIdV_down_T,  r'd$I/$d$V$ ($G_0$)'],
-                'time_up':          [self.time_up,      r'time']
-            }
-        except AttributeError:
-            print('Value not found. Please calculate first!')
-            return
-        
+                'uH_up_mT':         [self.y_sorted*1e3, r'$\mu_0H^\rightarrow$ (mT)'],
+                'uH_up_T':          [self.y_sorted,     r'$\mu_0H^\rightarrow$ (T)'],
+                'uH_down_mT':       [self.y_sorted*1e3, r'$\mu_0H^\leftarrow$ (mT)'],
+                'uH_down_T':        [self.y_sorted,     r'$\mu_0H^\leftarrow$ (T)'],
+                'uH_mT':            [self.y_sorted*1e3, r'$\mu_0H$ (mT)'],
+                'uH_T':             [self.y_sorted,     r'$\mu_0H$ (T)'],
+                'V_gate_up_V':      [self.y_sorted,     r'$V_\mathrm{Gate}^\rightarrow$ (V)'],
+                'V_gate_down_V':    [self.y_sorted,     r'$V_\mathrm{Gate}^\leftarrow$ (V)'],
+                'V_gate_V':         [self.y_sorted,     r'$V_\mathrm{Gate}$ (V)'],
+                'V_gate_up_mV':     [self.y_sorted*1e3, r'$V_\mathrm{Gate}^\rightarrow$ (mV)'],
+                'V_gate_down_mV':   [self.y_sorted*1e3, r'$V_\mathrm{Gate}^\leftarrow$ (mV)'],
+                'V_gate_mV':        [self.y_sorted*1e3, r'$V_\mathrm{Gate}$ (mV)'],
+                'time_up':          [self.time_up,      r'time'],
+            }        
 
         try:
             self.x = self.plot_keys[x_key][0]
-            self.x_label = self.plot_keys[x_key][1]
             self.y = self.plot_keys[y_key][0]
-            self.y_label = self.plot_keys[y_key][1]
             self.z = self.plot_keys[z_key][0]
+
+            self.x_label = self.plot_keys[x_key][1]
+            self.y_label = self.plot_keys[y_key][1]
             self.z_label = self.plot_keys[z_key][1]
+
+            self.x_key = x_key
+            self.y_key = y_key
+            self.z_key = z_key
+
+            self.x_lim = x_lim
+            self.y_lim = y_lim
+            self.z_lim = z_lim
         except KeyError:
             print('Key not found. Choose from:')
             for key in self.plot_keys.keys():
                 print(f"'{key}")
             return
 
-        self.x_key = x_key
-        self.y_key = y_key
-        self.z_key = z_key
 
-        if self.z.dtype == np.dtype('int32'):
-            warnings.warn("img is integer. Sure?")
-
-        stepsize_x=np.abs(self.x[-1]-self.x[-2])/2
-        stepsize_y=np.abs(self.y[-1]-self.y[-2])/2
-        if x_lim is None:
-            x_ind = [0, -1]
-        else:
-            if x_lim[0] >= x_lim[1]:
-                warnings.warn('First x_lim must be smaller than first one.')
-                return
-            x_ind = [np.abs(self.x-x_lim[0]).argmin(),
-                    np.abs(self.x-x_lim[1]).argmin()]
-        if y_lim is None:
-            y_ind = [0, -1]
-        else:
-            if y_lim[0] >= y_lim[1]:
-                warnings.warn('First y_lim must be smaller than first one.')
-                return
-            y_ind = [np.abs(self.y-y_lim[0]).argmin(),
-                    np.abs(self.y-y_lim[1]).argmin()]
-        ext = [self.x[x_ind[0]]-stepsize_x,
-               self.x[x_ind[1]]+stepsize_x,
-               self.y[y_ind[0]]-stepsize_y,
-               self.y[y_ind[1]]+stepsize_y]
-        self.z = self.z[y_ind[0]:y_ind[1],
-                        x_ind[0]:x_ind[1]]
-        self.x = self.x[x_ind[0]:x_ind[1]]
-        self.y = self.y[y_ind[0]:y_ind[1]]
-
-        if z_lim is None:
-            z_lim = [np.nanmean(self.z)-np.nanstd(self.z)/contrast, 
-                     np.nanmean(self.z)+np.nanstd(self.z)/contrast]
-
-        plt.close(self.fig_nr)
-        self.fig, (self.ax_z, self.ax_c) = plt.subplots(
-            num=self.fig_nr,
-            ncols=2,
-            figsize=(6,4),
-            dpi=self.dpi,
-            gridspec_kw={"width_ratios":[5.8,.2]},
-            constrained_layout=True
+        fig, ax_z, ax_c, x, y, z, ext = plot_map(
+            x = self.x, 
+            y = self.y, 
+            z = self.z, 
+            x_lim = self.x_lim, 
+            y_lim = self.y_lim, 
+            z_lim = self.z_lim,
+            x_label = self.x_label, 
+            y_label = self.y_label,  
+            z_label = self.z_label, 
+            fig_nr = self.fig_nr,
+            cmap = self.cmap,
+            display_dpi = self.display_dpi,
+            contrast = self.contrast,
             )
-
-        im = self.ax_z.imshow(self.z, 
-                        extent=ext, 
-                        aspect='auto',
-                        origin='lower',
-                        clim=z_lim,
-                        cmap=self.cmap,
-                        interpolation='none')
-        self.ax_z.set_xlabel(self.x_label)
-        self.ax_z.set_ylabel(self.y_label)
-        self.ax_z.ticklabel_format(
-            axis="both", 
-            style="sci", 
-            scilimits=(-3,3),
-            useMathText=True
-        )
-        self.ax_z.tick_params(direction='in')
-
-        cbar = self.fig.colorbar(im, label=self.z_label, cax=self.ax_c)
-        self.ax_c.tick_params(direction='in')
-        lim = self.ax_z.set_xlim(ext[0],ext[1])
-        lim = self.ax_z.set_ylim(ext[2],ext[3])
+        self.fig = fig
+        self.ax_z = ax_z
+        self.ax_c = ax_c
+        self.x = x
+        self.y = y
+        self.z = z
+        self.ext = ext
 
         if self.title is not None:
             plt.suptitle(self.title)
         else:
             plt.suptitle(self.mkey)
-
 
     def save_figure(
         self,
@@ -540,9 +478,9 @@ class EvaluationScript_v2():
 
         # Save Everything
         name = os.path.join(os.getcwd(), self.fig_folder, title)
-        self.fig.savefig(f'{name}.png')
+        self.fig.savefig(f'{name}.png', dpi=self.png_dpi)
         if self.pdf: # save as pdf
-            self.fig.savefig(f'{name}.pdf', dpi=600)
+            self.fig.savefig(f'{name}.pdf', dpi=self.pdf_dpi)
         print(f"Figure is saved under: {self.fig_folder}/{title}.png")
 
 
