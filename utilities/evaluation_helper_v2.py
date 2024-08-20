@@ -143,14 +143,15 @@ def plot_map(
                 np.abs(x-x_lim[1]).argmin()]
     y_ind = [np.abs(y-y_lim[0]).argmin(),
                 np.abs(y-y_lim[1]).argmin()]
-    ext = [x[x_ind[0]]-stepsize_x,
-            x[x_ind[1]]+stepsize_x,
-            y[y_ind[0]]-stepsize_y,
-            y[y_ind[1]]+stepsize_y]
-    z = z[y_ind[0]:y_ind[1],
-            x_ind[0]:x_ind[1]]
-    x = x[x_ind[0]:x_ind[1]]
-    y = y[y_ind[0]:y_ind[1]]
+    
+    ext = np.array([x[x_ind[0]]-stepsize_x,
+                    x[x_ind[1]]+stepsize_x,
+                    y[y_ind[0]]-stepsize_y,
+                    y[y_ind[1]]+stepsize_y],
+                    dtype = 'float64')
+    z = np.array(z[y_ind[0]:y_ind[1], x_ind[0]:x_ind[1]], dtype='float64')
+    x = np.array(x[x_ind[0]:x_ind[1]], dtype='float64')
+    y = np.array(y[y_ind[0]:y_ind[1]], dtype='float64')
 
     if z_lim == [0, 0]:
         z_lim = [float(np.nanmean(z)-np.nanstd(z)/contrast), 
