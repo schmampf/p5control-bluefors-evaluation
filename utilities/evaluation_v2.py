@@ -1,10 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-import warnings, os, platform, logging, h5py
+import warnings, os, platform, logging, h5py, pickle
 
 from tqdm import tqdm
 from PIL import Image
+from scipy import constants
 
 from .corporate_design_colors_v4 import cmap
 from .evaluation_helper_v2 import *
@@ -34,10 +35,12 @@ class EvaluationScript_v2():
         self.file_folder = ''
         self.mkey = ''
 
+        self.fig_folder = 'figures/'
+        self.data_folder = 'data/'
+
         self.V1_AMP = None
         self.V1_AMP = None
-        self.R_REF = 51.689e3
-        self.G_0 = 7.7481e-5 # Siemens, 1/Ohm
+        self.R_REF = 51.689e3 # Ohm
 
         self.V_min  = -1.8e-3
         self.V_max  = +1.8e-3
@@ -59,15 +62,7 @@ class EvaluationScript_v2():
         self.pdf_dpi = 600
         self.pdf = False
         self.cmap = cmap(color='seeblau', bad='gray')
-        self.fig_folder = 'figures/'
-        self.contrast = 1
-
-        self.T_axis           = np.zeros(2000)
-        self.I_up_T      = np.zeros(2000)
-        self.I_down_T    = np.zeros(2000)
-        self.dIdV_up_T   = np.zeros(2000)
-        self.dIdV_down_T = np.zeros(2000)
-        
+        self.contrast = 1        
 
         self.indices = {
             'temperatures': [7, -3, 1e-6, 'no_heater'],
@@ -75,7 +70,7 @@ class EvaluationScript_v2():
         }
 
         self.plot_keys = {
-                'y-axis':           ['self.y_axis',            r'$y$ (arb. u.)'],
+                'y_axis':           ['self.y_axis',            r'$y$ (arb. u.)'],
                 'V_bias_up_muV':    ['self.V_axis*1e6',        r'$V_\mathrm{Bias}^\rightarrow$ (µV)'],
                 'V_bias_up_mV':     ['self.V_axis*1e3',        r'$V_\mathrm{Bias}^\rightarrow$ (mV)'],
                 'V_bias_up_V':      ['self.V_axis*1e0',        r'$V_\mathrm{Bias}^\rightarrow$ (V)'],
@@ -108,6 +103,8 @@ class EvaluationScript_v2():
                 'V_gate_mV':        ['self.y_axis*1e3',        r'$V_\mathrm{Gate}$ (mV)'],
                 'time_up':          ['self.time_up',           r'time'],
             } 
+        
+        self.ignore = []
 
         logger.info('(%s) ... initialized.', self._name)
 
@@ -411,8 +408,8 @@ class EvaluationScript_v2():
         self.off_V2       = self.off_V2[indices]
 
         # calculating differential conductance
-        self.dIdV_up   = np.gradient(self.I_up,   self.V_axis, axis=1)/self.G_0
-        self.dIdV_down = np.gradient(self.I_down, self.V_axis, axis=1)/self.G_0
+        self.dIdV_up   = np.gradient(self.I_up,   self.V_axis, axis=1)/constants.physical_constants['conductance quantum'][0]
+        self.dIdV_down = np.gradient(self.I_down, self.V_axis, axis=1)/constants.physical_constants['conductance quantum'][0]
 
         # calculates self.T_mean_up, self.T_mean_down
         self.T_mean_up   = np.nanmean(self.T_all_up,   axis=1)
@@ -643,19 +640,53 @@ class EvaluationScript_v2():
             logger.info("(%s) saveFigure() to %s%s.pdf", self._name, self.fig_folder, self.title)
             self.fig.savefig(f'{name}.pdf', dpi=self.pdf_dpi)
 
+    def saveData(
+            self,
+            title = None,
+            ):
+        """ saveData()
+        - safes self.__dict__ to pickle
+        """
+        logger.info("(%s) saveData()", self._name)
 
-    # def get_dict_keys(self):   
-    #     ignore = ['fig', 'ax_z', 'ax_c', 'cmap']
-    #     keys = []
-    #     for key in self.__dict__.keys():
-    #         if key not in ignore:
-    #             keys.append(key)
-    #     return keys
+        # Handle Title
+        if title is None:
+            title = f"{self.title}.pickle"
 
-    # def get_keys(self):
-    #     key = 'self.'+self.key
-    #     dict_keys = self.get_dict_keys()
-    #     dictionary = {}
-    #     for key in dict_keys:
-    #         dictionary[key] = globals()[key]
-    #     return dictionary
+        # Handle data folder
+        check = os.path.isdir(self.data_folder)
+        if not check and self.data_folder != '':
+            os.makedirs(self.data_folder)
+
+        # Get Dictionary
+        data = {}
+        for key in self.__dict__.keys():
+            if key not in self.ignore:
+                data[key] = self.__dict__[key]
+
+        # save data to pickle
+        name = os.path.join(os.getcwd(), self.data_folder, title)
+        with open(name, 'wb') as file:
+            pickle.dump(data, file)
+
+    def loadData(
+            self,
+            title = None,
+            ):
+        """ loadData()
+        - gets self.__dict__ from pickle
+        """
+        logger.info("(%s) loadData()", self._name)
+
+        # Handle Title
+        if title is None:
+            title = f"{self.title}.pickle"
+        
+        # get data from pickle
+        name = os.path.join(os.getcwd(), self.data_folder, title)
+        with open(name, 'rb') as file:
+            data = pickle.load(file)
+
+        # Save Data to self.
+        for key in data.keys():
+            self.__dict__[key] = data[key]
