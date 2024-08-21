@@ -6,6 +6,7 @@ import warnings, os, platform, logging, h5py, pickle
 from tqdm import tqdm
 from PIL import Image
 from scipy import constants
+from scipy.signal import savgol_filter
 
 from .corporate_design_colors_v4 import cmap
 from .evaluation_helper_v2 import *
@@ -37,6 +38,7 @@ class EvaluationScript_v2():
 
         self.fig_folder = 'figures/'
         self.data_folder = 'data/'
+        self.sub_folder = ''
 
         self.V1_AMP = None
         self.V1_AMP = None
@@ -54,6 +56,8 @@ class EvaluationScript_v2():
         self.trigger_down = 2
 
         self.upsampling = None
+        self.window_length = 20
+        self.polyorder = 2
 
         self.title = ''
         self.fig_nr = 0
@@ -70,38 +74,38 @@ class EvaluationScript_v2():
         }
 
         self.plot_keys = {
-                'y_axis':           ['self.y_axis',            r'$y$ (arb. u.)'],
-                'V_bias_up_muV':    ['self.V_axis*1e6',        r'$V_\mathrm{Bias}^\rightarrow$ (µV)'],
-                'V_bias_up_mV':     ['self.V_axis*1e3',        r'$V_\mathrm{Bias}^\rightarrow$ (mV)'],
-                'V_bias_up_V':      ['self.V_axis*1e0',        r'$V_\mathrm{Bias}^\rightarrow$ (V)'],
-                'V_bias_down_muV':  ['self.V_axis*1e6',        r'$V_\mathrm{Bias}^\leftarrow$ (µV)'],
-                'V_bias_down_mV':   ['self.V_axis*1e3',        r'$V_\mathrm{Bias}^\leftarrow$ (mV)'],
-                'V_bias_down_V':    ['self.V_axis*1e0',        r'$V_\mathrm{Bias}^\leftarrow$ (V)'],
-                'heater_power_muW': ['self.y_axis*1e6',        r'$P_\mathrm{Heater}$ (µW)'],
-                'heater_power_mW':  ['self.y_axis*1e3',        r'$P_\mathrm{Heater}$ (mW)'],
-                'T_all_up_mK':      ['self.T_all_up*1e3',      r'$T_{Sample}$ (mK)'],
-                'T_all_up_K':       ['self.T_all_up*1e0',      r'$T_{Sample}$ (K)'],
-                'T_up_mK':          ['self.T_mean_up*1e3',     r'$T_\mathrm{Sample}$ (mK)'],
-                'T_up_K':           ['self.T_mean_up*1e0',     r'$T_\mathrm{Sample}$ (K)'],
-                'T_axis_up_K':      ['self.T_axis',            r'$T_\mathrm{Sample}^\rightarrow$ (K)'],
-                'T_axis_down_K':    ['self.T_axis',            r'$T_\mathrm{Sample}^\leftarrow$ (K)'],
-                'dIdV_up':          ['self.dIdV_up',           r'd$I/$d$V$ ($G_0$)'],
-                'dIdV_up_T':        ['self.dIdV_up_T',         r'd$I/$d$V$ ($G_0$)'],
-                'dIdV_down':        ['self.dIdV_down',         r'd$I/$d$V$ ($G_0$)'],
-                'dIdV_down_T':      ['self.dIdV_down_T',       r'd$I/$d$V$ ($G_0$)'],
-                'uH_up_mT':         ['self.y_axis*1e3',        r'$\mu_0H^\rightarrow$ (mT)'],
-                'uH_up_T':          ['self.y_axis',            r'$\mu_0H^\rightarrow$ (T)'],
-                'uH_down_mT':       ['self.y_axis*1e3',        r'$\mu_0H^\leftarrow$ (mT)'],
-                'uH_down_T':        ['self.y_axis',            r'$\mu_0H^\leftarrow$ (T)'],
-                'uH_mT':            ['self.y_axis*1e3',        r'$\mu_0H$ (mT)'],
-                'uH_T':             ['self.y_axis',            r'$\mu_0H$ (T)'],
-                'V_gate_up_V':      ['self.y_axis',            r'$V_\mathrm{Gate}^\rightarrow$ (V)'],
-                'V_gate_down_V':    ['self.y_axis',            r'$V_\mathrm{Gate}^\leftarrow$ (V)'],
-                'V_gate_V':         ['self.y_axis',            r'$V_\mathrm{Gate}$ (V)'],
-                'V_gate_up_mV':     ['self.y_axis*1e3',        r'$V_\mathrm{Gate}^\rightarrow$ (mV)'],
-                'V_gate_down_mV':   ['self.y_axis*1e3',        r'$V_\mathrm{Gate}^\leftarrow$ (mV)'],
-                'V_gate_mV':        ['self.y_axis*1e3',        r'$V_\mathrm{Gate}$ (mV)'],
-                'time_up':          ['self.time_up',           r'time'],
+                'y_axis':             ['self.y_axis',             r'$y$ (arb. u.)'],
+                'V_bias_up_muV':      ['self.V_axis*1e6',         r'$V_\mathrm{Bias}^\rightarrow$ (µV)'],
+                'V_bias_up_mV':       ['self.V_axis*1e3',         r'$V_\mathrm{Bias}^\rightarrow$ (mV)'],
+                'V_bias_up_V':        ['self.V_axis*1e0',         r'$V_\mathrm{Bias}^\rightarrow$ (V)'],
+                'V_bias_down_muV':    ['self.V_axis*1e6',         r'$V_\mathrm{Bias}^\leftarrow$ (µV)'],
+                'V_bias_down_mV':     ['self.V_axis*1e3',         r'$V_\mathrm{Bias}^\leftarrow$ (mV)'],
+                'V_bias_down_V':      ['self.V_axis*1e0',         r'$V_\mathrm{Bias}^\leftarrow$ (V)'],
+                'heater_power_muW':   ['self.y_axis*1e6',         r'$P_\mathrm{Heater}$ (µW)'],
+                'heater_power_mW':    ['self.y_axis*1e3',         r'$P_\mathrm{Heater}$ (mW)'],
+                'T_all_up_mK':        ['self.T_all_up*1e3',       r'$T_{Sample}$ (mK)'],
+                'T_all_up_K':         ['self.T_all_up*1e0',       r'$T_{Sample}$ (K)'],
+                'T_up_mK':            ['self.T_mean_up*1e3',      r'$T_\mathrm{Sample}$ (mK)'],
+                'T_up_K':             ['self.T_mean_up*1e0',      r'$T_\mathrm{Sample}$ (K)'],
+                'T_axis_up_K':        ['self.T_axis',             r'$T_\mathrm{Sample}^\rightarrow$ (K)'],
+                'T_axis_down_K':      ['self.T_axis',             r'$T_\mathrm{Sample}^\leftarrow$ (K)'],
+                'dIdV_up':            ['self.dIdV_up',            r'd$I/$d$V$ ($G_0$)'],
+                'dIdV_up_T':          ['self.dIdV_up_T',          r'd$I/$d$V$ ($G_0$)'],
+                'dIdV_down':          ['self.dIdV_down',          r'd$I/$d$V$ ($G_0$)'],
+                'dIdV_down_T':        ['self.dIdV_down_T',        r'd$I/$d$V$ ($G_0$)'],
+                'uH_up_mT':           ['self.y_axis*1e3',         r'$\mu_0H^\rightarrow$ (mT)'],
+                'uH_up_T':            ['self.y_axis',             r'$\mu_0H^\rightarrow$ (T)'],
+                'uH_down_mT':         ['self.y_axis*1e3',         r'$\mu_0H^\leftarrow$ (mT)'],
+                'uH_down_T':          ['self.y_axis',             r'$\mu_0H^\leftarrow$ (T)'],
+                'uH_mT':              ['self.y_axis*1e3',         r'$\mu_0H$ (mT)'],
+                'uH_T':               ['self.y_axis',             r'$\mu_0H$ (T)'],
+                'V_gate_up_V':        ['self.y_axis',             r'$V_\mathrm{Gate}^\rightarrow$ (V)'],
+                'V_gate_down_V':      ['self.y_axis',             r'$V_\mathrm{Gate}^\leftarrow$ (V)'],
+                'V_gate_V':           ['self.y_axis',             r'$V_\mathrm{Gate}$ (V)'],
+                'V_gate_up_mV':       ['self.y_axis*1e3',         r'$V_\mathrm{Gate}^\rightarrow$ (mV)'],
+                'V_gate_down_mV':     ['self.y_axis*1e3',         r'$V_\mathrm{Gate}^\leftarrow$ (mV)'],
+                'V_gate_mV':          ['self.y_axis*1e3',         r'$V_\mathrm{Gate}$ (mV)'],
+                'time_up':            ['self.time_up',            r'time'],
             } 
         
         self.ignore = []
@@ -477,6 +481,9 @@ class EvaluationScript_v2():
             x_lim:list = [np.nan, np.nan],
             y_lim:list = [np.nan, np.nan],
             z_lim:list = [np.nan, np.nan],
+            smoothing:bool = False,
+            window_length:float = np.nan,
+            polyorder:float = np.nan,
     ):         
         """ showMap()
         - checks for synthax errors
@@ -498,29 +505,33 @@ class EvaluationScript_v2():
         z_lim : list = [np.nan, np.nan]
             sets limits on z-Axis / colorbar
         """
-
+        
         if x_lim == [np.nan, np.nan]:
             x_lim = self.x_lim
         if y_lim == [np.nan, np.nan]:
             y_lim = self.y_lim
         if z_lim == [np.nan, np.nan]:
             z_lim = self.z_lim
+        
+        if np.isnan(window_length):
+            window_length = self.window_length
+        else:
+            self.window_length = window_length
 
-        logger.info("(%s) showMap('%s', '%s', '%s', %s, %s, %s)", self._name, x_key, y_key, z_key, x_lim, y_lim, z_lim)
+        if np.isnan(polyorder):
+            polyorder = self.polyorder
+        else:
+            self.polyorder = polyorder
+
+        logger.info(
+            "(%s) showMap(%s, %s, %s)", 
+            self._name, 
+            [x_key, y_key, z_key], 
+            [x_lim, y_lim, z_lim], 
+            [smoothing, window_length, polyorder]
+            )
 
         warning = False
-
-        if x_lim[0] >= x_lim[1]:
-            logger.warn('(%s) x_lim = [lower_limit, upper_limit].', self._name)
-            warning = True
-
-        if y_lim[0] >= y_lim[1]:
-            logger.warn('(%s) y_lim = [lower_limit, upper_limit].', self._name)
-            warning = True
-
-        if z_lim[0] >= z_lim[1]:
-            logger.warn('(%s) z_lim = [lower_limit, upper_limit].', self._name)
-            warning = True
 
         try:
             plot_key_x = self.plot_keys[x_key]
@@ -540,6 +551,18 @@ class EvaluationScript_v2():
             logger.warn('(%s) z_key not found.', self._name)
             warning = True
 
+        if x_lim[0] >= x_lim[1]:
+            logger.warn('(%s) x_lim = [lower_limit, upper_limit].', self._name)
+            warning = True
+
+        if y_lim[0] >= y_lim[1]:
+            logger.warn('(%s) y_lim = [lower_limit, upper_limit].', self._name)
+            warning = True
+
+        if z_lim[0] >= z_lim[1]:
+            logger.warn('(%s) z_lim = [lower_limit, upper_limit].', self._name)
+            warning = True
+
         if not warning:
             try:
                 x_data = eval(plot_key_x[0])
@@ -548,6 +571,9 @@ class EvaluationScript_v2():
             except AttributeError:
                 logger.warn('(%s) Required data not found. Check if data is calculated and plot_keys!', self._name)
                 return
+            
+            if smoothing:
+                z_data = savgol_filter(z_data, window_length=window_length, polyorder=polyorder)
 
             x_label = plot_key_x[1]
             y_label = plot_key_y[1]
@@ -601,7 +627,6 @@ class EvaluationScript_v2():
                 contrast = self.contrast,
                 )
         
-        
         self.fig = fig
         self.ax_z = ax_z
         self.ax_c = ax_c
@@ -628,13 +653,14 @@ class EvaluationScript_v2():
         # Handle Title
         title = f"{self.title}"
 
-        # Handle figure folder
-        check = os.path.isdir(self.fig_folder)
-        if not check and self.fig_folder != '':
-            os.makedirs(self.fig_folder)
-        name = os.path.join(os.getcwd(), self.fig_folder, title)
+        # Handle data folder
+        folder = os.path.join(os.getcwd(), self.fig_folder, self.sub_folder)
+        check = os.path.isdir(folder)
+        if not check:
+            os.makedirs(folder)
 
         # Save Everything
+        name = os.path.join(folder, title)
         self.fig.savefig(f'{name}.png', dpi=self.png_dpi)
         if self.pdf: # save as pdf
             logger.info("(%s) saveFigure() to %s%s.pdf", self._name, self.fig_folder, self.title)
@@ -654,9 +680,10 @@ class EvaluationScript_v2():
             title = f"{self.title}.pickle"
 
         # Handle data folder
-        check = os.path.isdir(self.data_folder)
+        folder = os.path.join(os.getcwd(), self.data_folder, self.sub_folder)
+        check = os.path.isdir(folder)
         if not check and self.data_folder != '':
-            os.makedirs(self.data_folder)
+            os.makedirs(folder)
 
         # Get Dictionary
         data = {}
@@ -665,7 +692,7 @@ class EvaluationScript_v2():
                 data[key] = self.__dict__[key]
 
         # save data to pickle
-        name = os.path.join(os.getcwd(), self.data_folder, title)
+        name = os.path.join(os.getcwd(), self.data_folder, self.sub_folder, title)
         with open(name, 'wb') as file:
             pickle.dump(data, file)
 
@@ -683,10 +710,72 @@ class EvaluationScript_v2():
             title = f"{self.title}.pickle"
         
         # get data from pickle
-        name = os.path.join(os.getcwd(), self.data_folder, title)
+        name = os.path.join(os.getcwd(), self.data_folder, self.sub_folder, title)
         with open(name, 'rb') as file:
             data = pickle.load(file)
 
         # Save Data to self.
         for key in data.keys():
             self.__dict__[key] = data[key]
+
+    def showData(
+            self,
+            ):
+        """ showData()
+        - safes self.__dict__ to pickle
+        """
+        logger.info("(%s) showData()", self._name)
+
+        # Get Dictionary
+        data = {}
+        for key in self.__dict__.keys():
+            if key not in self.ignore:
+                data[key] = self.__dict__[key]
+        return data
+    
+
+
+
+
+
+
+
+
+
+
+'''
+Decrapted.
+
+
+    def getMapsSmooth(
+            self,
+            window_length = None,
+            polyorder = None,
+        ):
+        """ getMapsSmooth()
+        - smoothes available Maps: I, dIdV, up, down, _T
+        """
+        logger.info('(%s) getMapsSmooth()', self._name)
+        
+        if window_length is None:
+            window_length = self.window_length
+        else:
+            self.window_length = window_length
+
+        if polyorder is None:
+            polyorder = self.polyorder
+        else:
+            self.polyorder = polyorder
+
+        self.I_up_smooth      = savgol_filter(self.I_up,      window_length=window_length, polyorder=polyorder)
+        self.I_down_smooth    = savgol_filter(self.I_down,    window_length=window_length, polyorder=polyorder)
+        self.dIdV_up_smooth   = savgol_filter(self.dIdV_up,   window_length=window_length, polyorder=polyorder)
+        self.dIdV_down_smooth = savgol_filter(self.dIdV_down, window_length=window_length, polyorder=polyorder)
+
+        if hasattr(self, 'T_axis'):
+            self.I_up_T_smooth      = savgol_filter(self.I_up_T,      window_length=window_length, polyorder=polyorder)
+            self.I_down_T_smooth    = savgol_filter(self.I_down_T,    window_length=window_length, polyorder=polyorder)
+            self.dIdV_up_T_smooth   = savgol_filter(self.dIdV_up_T,   window_length=window_length, polyorder=polyorder)
+            self.dIdV_down_T_smooth = savgol_filter(self.dIdV_down_T, window_length=window_length, polyorder=polyorder)
+
+'''
