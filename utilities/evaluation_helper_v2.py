@@ -167,7 +167,7 @@ def plot_map(
         figsize=(6,4),
         dpi=display_dpi,
         gridspec_kw={"width_ratios":[5.8,.2]},
-        constrained_layout=True
+        constrained_layout=True,
         )
 
     im = ax_z.imshow(z, 
