@@ -71,6 +71,7 @@ class EvaluationScript_v2():
         self.indices = {
             'temperatures': [7, -3, 1e-6, 'no_heater'],
             'temperatures_up': [7, -2, 1e-6, 'no_heater'],
+            'gate_voltages': [5, -2, 1e-3, 'no_gate'],
         }
 
         self.plot_keys = {
@@ -238,6 +239,8 @@ class EvaluationScript_v2():
 
         self.y_unsorted = y
 
+        
+
     def setV(
             self,
             V_abs:float = np.nan,
@@ -280,6 +283,7 @@ class EvaluationScript_v2():
         
     def getMaps(
             self,
+            bounds:list = [0, 0],
     ):
         """ getMaps()
         - Calculate I and V and split in up / down sweep
@@ -306,7 +310,7 @@ class EvaluationScript_v2():
             logger.error('(%s) File can not be found!', self._name)
             return
         except KeyError:
-            logger.error('(%s) MEasurement can not be found!', self._name)
+            logger.error('(%s) Measurement can not be found!', self._name)
             return
 
         len_V = np.shape(self.V_axis)[0]
@@ -336,7 +340,7 @@ class EvaluationScript_v2():
                 temperature = f_keyed[k]["sweep"]["bluefors"]
             else:
                 temperature = False
-                warnings.warn('no temperature data available')
+                logger.error('(%s) No temperature data available!', self._name)
 
             # Calculate Offsets
             self.off_V1[i] = np.nanmean(offset["V1"])
@@ -352,72 +356,107 @@ class EvaluationScript_v2():
             v_raw = (v1 - self.off_V1[i]) / self.V1_AMP
             i_raw = (v2 - self.off_V2[i]) / self.V2_AMP / self.R_REF
 
-            # Divide into up- and downsweep
-            v_raw_up   = v_raw[trigger == self.trigger_up]
-            v_raw_down = v_raw[trigger == self.trigger_down]
-            i_raw_up   = i_raw[trigger == self.trigger_up]
-            i_raw_down = i_raw[trigger == self.trigger_down]
-            t_up    =  time[trigger == self.trigger_up]
-            t_down  =  time[trigger == self.trigger_down]
+            if self.trigger_up is not None:
+                # Get upsweep
+                v_raw_up   = v_raw[trigger == self.trigger_up]
+                i_raw_up   = i_raw[trigger == self.trigger_up]
+                t_up    =  time[trigger == self.trigger_up]
+                # Calculate Timepoints
+                self.t_up_start[i]   = t_up[0]
+                self.t_up_stop[i]    = t_up[-1]
+                # Bin that stuff
+                i_up, _   = bin_y_over_x(v_raw_up,   i_raw_up,   self.V_axis)
+                time_up, _   = bin_y_over_x(v_raw_up,   t_up,    self.V_axis)
+                # Save to Array
+                self.I_up[i,:]   = i_up
+                self.time_up[i,:]   = time_up
 
-            # Calculate Timepoints
-            self.t_up_start[i]   = t_up[0]
-            self.t_up_stop[i]    = t_up[-1]
-            self.t_down_start[i] = t_down[0]
-            self.t_down_stop[i]  = t_down[-1]
+            if self.trigger_down is not None:
+                # Get dwonsweep
+                v_raw_down = v_raw[trigger == self.trigger_down]
+                i_raw_down = i_raw[trigger == self.trigger_down]
+                t_down  =  time[trigger == self.trigger_down]
+                # Calculate Timepoints
+                self.t_down_start[i] = t_down[0]
+                self.t_down_stop[i]  = t_down[-1]
+                # Bin that stuff
+                i_down, _ = bin_y_over_x(v_raw_down, i_raw_down, self.V_axis)
+                time_down, _ = bin_y_over_x(v_raw_down, t_down,  self.V_axis)
+                # Save to Array
+                self.I_down[i,:] = i_down
+                self.time_down[i,:] = time_down
 
-            # Bin that stuff
-            i_up, _   = bin_y_over_x(v_raw_up,   i_raw_up,   self.V_axis)
-            i_down, _ = bin_y_over_x(v_raw_down, i_raw_down, self.V_axis)
-            time_up, _   = bin_y_over_x(v_raw_up,   t_up,    self.V_axis)
-            time_down, _ = bin_y_over_x(v_raw_down, t_down,  self.V_axis)
-
-            # Save to Array
-            self.I_up[i,:]   = i_up
-            self.I_down[i,:] = i_down
-            self.time_up[i,:]   = time_up
-            self.time_down[i,:] = time_down
 
             # Take care of time and Temperature
             if temperature:
                 temp_t = temperature['time']
                 temp_T = temperature['Tsample']
-                temp_t_up   = linfit(time_up)
-                if temp_t_up[0] > temp_t_up[1]:
-                    temp_t_up = np.flip(temp_t_up)
-                temp_t_down = linfit(time_down)
-                if temp_t_down[0] > temp_t_down[1]:
-                    temp_t_down = np.flip(temp_t_down)
-                T_up, _   = bin_y_over_x(temp_t, temp_T, temp_t_up,   upsampling=1000)
-                T_down, _ = bin_y_over_x(temp_t, temp_T, temp_t_down, upsampling=1000)
-                self.T_all_up[i,:]   = T_up
-                self.T_all_down[i,:] = T_down
+
+                if self.trigger_up is not None:
+                    temp_t_up   = linfit(time_up)
+                    if temp_t_up[0] > temp_t_up[1]:
+                        temp_t_up = np.flip(temp_t_up)
+                    T_up, _   = bin_y_over_x(temp_t, temp_T, temp_t_up,   upsampling=1000)
+                    self.T_all_up[i,:]   = T_up
+
+                if self.trigger_down is not None:
+                    temp_t_down = linfit(time_down)
+                    if temp_t_down[0] > temp_t_down[1]:
+                        temp_t_down = np.flip(temp_t_down)
+                    T_down, _ = bin_y_over_x(temp_t, temp_T, temp_t_down, upsampling=1000)
+                    self.T_all_down[i,:] = T_down                
+                
 
         # sorting afterwards, because of probably unknown characters in keys
         indices           = np.argsort(self.y_unsorted)
         self.y_axis       = self.y_unsorted[indices]
-
-        self.I_up         = self.I_up[indices,:]
-        self.I_down       = self.I_down[indices,:]
-        self.time_up      = self.time_up[indices,:]
-        self.time_down    = self.time_down[indices,:]
-        self.T_all_up     = self.T_all_up[indices,:]
-        self.T_all_down   = self.T_all_down[indices,:]
-        
-        self.t_up_start   = self.t_up_start[indices]
-        self.t_up_stop    = self.t_up_stop[indices]
-        self.t_down_start = self.t_down_start[indices]
-        self.t_down_stop  = self.t_down_stop[indices]
         self.off_V1       = self.off_V1[indices]
         self.off_V2       = self.off_V2[indices]
 
-        # calculating differential conductance
-        self.dIdV_up   = np.gradient(self.I_up,   self.V_axis, axis=1)/constants.physical_constants['conductance quantum'][0]
-        self.dIdV_down = np.gradient(self.I_down, self.V_axis, axis=1)/constants.physical_constants['conductance quantum'][0]
+        if self.trigger_up is not None:
+            self.I_up         = self.I_up[indices,:]
+            self.time_up      = self.time_up[indices,:]
+            self.T_all_up     = self.T_all_up[indices,:]
+            self.t_up_start   = self.t_up_start[indices]
+            self.t_up_stop    = self.t_up_stop[indices]
 
-        # calculates self.T_mean_up, self.T_mean_down
-        self.T_mean_up   = np.nanmean(self.T_all_up,   axis=1)
-        self.T_mean_down = np.nanmean(self.T_all_down, axis=1)
+        if self.trigger_down is not None:
+            self.I_down       = self.I_down[indices,:]
+            self.time_down    = self.time_down[indices,:]
+            self.T_all_down   = self.T_all_down[indices,:]
+            self.t_down_start = self.t_down_start[indices]
+            self.t_down_stop  = self.t_down_stop[indices]
+
+        if bounds != [0, 0]:
+            self.y_axis       = self.y_axis[bounds[0]:bounds[1]]
+            self.off_V1       = self.off_V1[bounds[0]:bounds[1]]
+            self.off_V2       = self.off_V2[bounds[0]:bounds[1]]
+
+            if self.trigger_up is not None:
+                self.I_up         = self.I_up[bounds[0]:bounds[1],:]
+                self.time_up      = self.time_up[bounds[0]:bounds[1],:]
+                self.T_all_up     = self.T_all_up[bounds[0]:bounds[1],:]
+                self.t_up_start   = self.t_up_start[bounds[0]:bounds[1]]
+                self.t_up_stop    = self.t_up_stop[bounds[0]:bounds[1]]
+
+            if self.trigger_down is not None:
+                self.I_down       = self.I_down[bounds[0]:bounds[1],:]
+                self.time_down    = self.time_down[bounds[0]:bounds[1],:]
+                self.T_all_down   = self.T_all_down[bounds[0]:bounds[1],:]
+                self.t_down_start = self.t_down_start[bounds[0]:bounds[1]]
+                self.t_down_stop  = self.t_down_stop[bounds[0]:bounds[1]]
+
+        G_0 = constants.physical_constants['conductance quantum'][0]
+
+        if self.trigger_up is not None:
+            # calculating differential conductance
+            self.dIdV_up   = np.gradient(self.I_up,   self.V_axis, axis=1)/G_0
+            # calculates self.T_mean_up, self.T_mean_down
+            self.T_mean_up   = np.nanmean(self.T_all_up,   axis=1)
+
+        if self.trigger_down is not None:
+            self.dIdV_down = np.gradient(self.I_down, self.V_axis, axis=1)/G_0
+            self.T_mean_down = np.nanmean(self.T_all_down, axis=1)
 
     def setT(
             self,
