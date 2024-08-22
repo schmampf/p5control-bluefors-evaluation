@@ -21,7 +21,7 @@ def linfit(x):
     not_nans = np.invert(nans)
     xx = np.arange(np.shape(nu_x)[0])
     poly = np.polyfit(xx[not_nans], 
-                      nu_x[not_nans], 1)
+                    nu_x[not_nans], 1)
     fit_x = xx * poly[0] + poly[1]
     return fit_x
 
