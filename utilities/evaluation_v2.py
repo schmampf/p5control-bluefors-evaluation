@@ -666,13 +666,13 @@ class EvaluationScript_v2():
                 contrast = self.contrast,
                 )
         
-        self.fig = fig
-        self.ax_z = ax_z
-        self.ax_c = ax_c
-        self.x = x
-        self.y = y
-        self.z = z
-        self.ext = ext
+        # self.fig = fig
+        # self.ax_z = ax_z
+        # self.ax_c = ax_c
+        # self.x = x
+        # self.y = y
+        # self.z = z
+        # self.ext = ext
 
         if warning:
             plt.suptitle('Hier könnte ihre Werbung stehen.')
@@ -680,6 +680,25 @@ class EvaluationScript_v2():
             plt.suptitle(self.title)
         else:
             plt.suptitle(self.mkey)
+
+        self.show_map = {
+            'fig': fig,
+            'ax_z': ax_z,
+            'ax_c': ax_c,
+            'ext': ext,
+            'x': x,
+            'y': y,
+            'z': z,
+            'x_lim': x_lim,
+            'y_lim': y_lim,
+            'z_lim': z_lim,
+            'x_label': x_label,
+            'y_label': y_label,
+            'z_label': z_label,
+            'x_key': x_key,
+            'y_key': y_key,
+            'z_key': z_key,
+        }
 
     def saveFigure(
         self,
