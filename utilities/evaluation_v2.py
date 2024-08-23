@@ -60,13 +60,17 @@ class EvaluationScript_v2():
         self.polyorder = 2
 
         self.title = ''
-        self.fig_nr = 0
+        self.fig_nr_show_map = 0
         self.display_dpi = 100
         self.png_dpi = 600
         self.pdf_dpi = 600
         self.pdf = False
         self.cmap = cmap(color='seeblau', bad='gray')
         self.contrast = 1        
+
+        self.x_lim = [-1, 1]
+        self.y_lim = [-1, 1]
+        self.z_lim = [-1, 1]
 
         self.indices = {
             'temperatures': [7, -3, 1e-6, 'no_heater'],
@@ -511,15 +515,17 @@ class EvaluationScript_v2():
         self.I_down_T, self.counter_down = bin_z_over_y(self.T_mean_down, self.I_down, self.T_axis)
         self.dIdV_up_T,   _ = bin_z_over_y(self.T_mean_up,   self.dIdV_up,   self.T_axis)
         self.dIdV_down_T, _ = bin_z_over_y(self.T_mean_down, self.dIdV_down, self.T_axis)
+        self.y_axis_up_T, _   = bin_y_over_x(self.T_mean_up,   self.y_axis, self.T_axis)
+        self.y_axis_down_T, _ = bin_y_over_x(self.T_mean_down, self.y_axis, self.T_axis)
 
     def showMap(
             self,
             x_key:str = 'V_bias_up_mV',
             y_key:str = 'y_axis',
             z_key:str = 'dIdV_up',
-            x_lim:list = [np.nan, np.nan],
-            y_lim:list = [np.nan, np.nan],
-            z_lim:list = [np.nan, np.nan],
+            x_lim:list[float] = [np.nan, np.nan],
+            y_lim:list[float] = [np.nan, np.nan],
+            z_lim:list[float] = [np.nan, np.nan],
             smoothing:bool = False,
             window_length:float = np.nan,
             polyorder:float = np.nan,
@@ -618,18 +624,6 @@ class EvaluationScript_v2():
             y_label = plot_key_y[1]
             z_label = plot_key_z[1]
 
-            self.x_label = x_label
-            self.y_label = y_label
-            self.z_label = z_label
-
-            self.x_lim = x_lim
-            self.y_lim = y_lim
-            self.z_lim = z_lim
-
-            self.x_key = x_key
-            self.y_key = y_key
-            self.z_key = z_key
-
         else:
             logger.warn('(%s) Check Parameter!', self._name)
             try:
@@ -660,26 +654,19 @@ class EvaluationScript_v2():
                 x_label = x_label, 
                 y_label = y_label,  
                 z_label = z_label, 
-                fig_nr = self.fig_nr,
+                fig_nr = self.fig_nr_show_map,
                 cmap = self.cmap,
                 display_dpi = self.display_dpi,
                 contrast = self.contrast,
                 )
         
-        # self.fig = fig
-        # self.ax_z = ax_z
-        # self.ax_c = ax_c
-        # self.x = x
-        # self.y = y
-        # self.z = z
-        # self.ext = ext
-
         if warning:
-            plt.suptitle('Hier könnte ihre Werbung stehen.')
+            title = 'Hier könnte ihre Werbung stehen.'
         elif self.title is not None:
-            plt.suptitle(self.title)
+            title = self.title
         else:
-            plt.suptitle(self.mkey)
+            title = self.mkey
+        plt.suptitle(title)
 
         self.show_map = {
             'fig': fig,
@@ -695,9 +682,13 @@ class EvaluationScript_v2():
             'x_label': x_label,
             'y_label': y_label,
             'z_label': z_label,
+            'fig_nr': self.fig_nr_show_map,
+            'cmap': self.cmap,
+            'display_dpi': self.display_dpi,
             'x_key': x_key,
             'y_key': y_key,
             'z_key': z_key,
+            'contrast': self.contrast,
         }
 
     def saveFigure(
@@ -719,10 +710,10 @@ class EvaluationScript_v2():
 
         # Save Everything
         name = os.path.join(folder, title)
-        self.fig.savefig(f'{name}.png', dpi=self.png_dpi)
+        self.show_map['fig'].savefig(f'{name}.png', dpi=self.png_dpi)
         if self.pdf: # save as pdf
             logger.info("(%s) saveFigure() to %s%s.pdf", self._name, self.fig_folder, self.title)
-            self.fig.savefig(f'{name}.pdf', dpi=self.pdf_dpi)
+            self.show_map['show_map'].savefig(f'{name}.pdf', dpi=self.pdf_dpi)
 
     def saveData(
             self,
