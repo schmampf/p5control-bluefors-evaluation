@@ -193,5 +193,93 @@ def plot_map(
     lim = ax_z.set_ylim(ext[2],ext[3])
     
     return fig, ax_z, ax_c, x, y, z, ext
+    
+def plot_map_and_vector(
+    x: np.ndarray, 
+    y: np.ndarray, 
+    z: np.ndarray, 
+    n: np.ndarray,
+    x_lim: list[float] = [-1., 1.], 
+    y_lim: list[float] = [-1., 1.], 
+    z_lim: list[float] = [ 0., 0.],
+    x_label: str = r'$x$-label', 
+    y_label: str = r'$y$-label',  
+    z_label: str = r'$z$-label', 
+    fig_nr: int = 0,
+    cmap = cmap(color='seeblau', bad='gray'),
+    display_dpi: int = 100,
+    contrast: float = 1.,
+    ):
+    
+    if z.dtype == np.dtype('int32'):
+        warnings.warn("z is integer. Sure?")
+        
+    if x_lim[0] >= x_lim[1] or y_lim[0] >= y_lim[1] or z_lim[0] >= z_lim[1]:
+        warnings.warn('First of xy_lim must be smaller than first one.')
 
+    if z_lim == [0, 0]:
+        z_lim = [float(np.nanmean(z)-np.nanstd(z)/contrast), 
+                 float(np.nanmean(z)+np.nanstd(z)/contrast)]
 
+    stepsize_x=np.abs(x[-1]-x[-2])/2
+    stepsize_y=np.abs(y[-1]-y[-2])/2
+    x_ind = [np.abs(x-x_lim[0]).argmin(),
+                np.abs(x-x_lim[1]).argmin()]
+    y_ind = [np.abs(y-y_lim[0]).argmin(),
+                np.abs(y-y_lim[1]).argmin()]
+    
+    ext = np.array([x[x_ind[0]]-stepsize_x,
+                    x[x_ind[1]]+stepsize_x,
+                    y[y_ind[0]]-stepsize_y,
+                    y[y_ind[1]]+stepsize_y],
+                    dtype = 'float64')
+    z = np.array(z[y_ind[0]:y_ind[1], x_ind[0]:x_ind[1]], dtype='float64')
+    x = np.array(x[x_ind[0]:x_ind[1]], dtype='float64')
+    y = np.array(y[y_ind[0]:y_ind[1]], dtype='float64')
+    n = np.array(n[y_ind[0]:y_ind[1]], dtype='float64')
+
+    plt.close(fig_nr)
+    fig, (ax_n, ax_z, ax_c) = plt.subplots(
+        num=fig_nr,
+        ncols=3,
+        figsize=(6,4),
+        dpi=display_dpi,
+        gridspec_kw={"width_ratios":[1, 4.8,.2]},
+        constrained_layout=True,
+        )
+
+    im = ax_z.imshow(z, 
+                    extent=ext, 
+                    aspect='auto',
+                    origin='lower',
+                    clim=z_lim,
+                    cmap=cmap,
+                    interpolation='none')
+    ax_z.set_xlabel(x_label)
+    ax_z.ticklabel_format(
+        axis="x", 
+        style="sci", 
+        scilimits=(-9,9),
+        useMathText=True
+    )
+    ax_z.tick_params(direction='in', right=True, top=True)
+    ax_z.set_yticklabels([])
+
+    ax_n.plot(n, y)
+    ax_n.set_ylabel(y_label)
+    ax_n.ticklabel_format(
+        axis="x", 
+        style="sci", 
+        scilimits=(-9,9),
+        useMathText=True
+    )
+    ax_n.tick_params(direction='in', right=True, top=True)
+    ax_n.grid()
+
+    cbar = fig.colorbar(im, label=z_label, cax=ax_c)
+    ax_c.tick_params(direction='in')
+    lim = ax_z.set_xlim(ext[0],ext[1])
+    lim = ax_z.set_ylim(ext[2],ext[3])
+    lim = ax_n.set_ylim(ext[2],ext[3])
+    
+    return fig, ax_z, ax_c, x, y, z, ext
