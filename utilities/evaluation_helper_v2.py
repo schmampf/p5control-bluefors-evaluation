@@ -52,10 +52,16 @@ PLOT_KEYS = {
         "self.temperature_axis",
         r"$T_\mathrm{Sample}^\leftarrow$ (K)",
     ],
-    "dIdV_up": ["self.didv_up", r"d$I/$d$V$ ($G_0$)"],
-    "dIdV_up_T": ["self.didv_up_over_temperature", r"d$I/$d$V$ ($G_0$)"],
-    "dIdV_down": ["self.didv_down", r"d$I/$d$V$ ($G_0$)"],
-    "dIdV_down_T": ["self.didv_down_over_temperature", r"d$I/$d$V$ ($G_0$)"],
+    "dIdV_up": ["self.differential_conductance_up", r"d$I/$d$V$ ($G_0$)"],
+    "dIdV_up_T": [
+        "self.differential_conductance_up_over_temperature",
+        r"d$I/$d$V$ ($G_0$)",
+    ],
+    "dIdV_down": ["self.differential_conductance_down", r"d$I/$d$V$ ($G_0$)"],
+    "dIdV_down_T": [
+        "self.differential_conductance_down_over_temperature",
+        r"d$I/$d$V$ ($G_0$)",
+    ],
     "uH_up_mT": ["self.y_axis*1e3", r"$\mu_0H^\rightarrow$ (mT)"],
     "uH_up_T": ["self.y_axis", r"$\mu_0H^\rightarrow$ (T)"],
     "uH_down_mT": ["self.y_axis*1e3", r"$\mu_0H^\leftarrow$ (mT)"],
@@ -129,7 +135,7 @@ def bin_z_over_y(
     # Find Indizes of x on x_binned
     dig = np.digitize(y, bins=y_binned)
 
-    # Add up counter, I & didv
+    # Add up counter, I & differential_conductance
     for i, d in enumerate(dig):
         counter[d - 1] += 1
         result[d - 1, :] += z[i, :]
