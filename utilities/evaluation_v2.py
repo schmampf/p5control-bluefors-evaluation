@@ -681,9 +681,9 @@ class EvaluationScript:
 
         if not warning:
             try:
-                x_data = literal_eval(plot_key_x[0])
-                y_data = literal_eval(plot_key_y[0])
-                z_data = literal_eval(plot_key_z[0])
+                x_data = eval(plot_key_x[0])
+                y_data = eval(plot_key_y[0])
+                z_data = eval(plot_key_z[0])
             except AttributeError:
                 logger.warning(
                     "(%s) Required data not found. Check if data is calculated and plot_keys!",
