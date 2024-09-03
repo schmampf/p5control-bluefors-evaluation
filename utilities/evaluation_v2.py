@@ -1,7 +1,6 @@
 """Module providing a function printing python version."""
 
 from importlib import reload
-from ast import literal_eval
 
 import os
 import platform
@@ -166,20 +165,21 @@ class EvaluationScript:
         """
         logger.info("(%s) showAmplifications()", self._name)
 
-        file = File(f"{self.file_directory}{self.file_folder}{self.file_name}", "r")
-        time = file["status"]["femto"]["time"]
-        amp_a = file["status"]["femto"]["amp_A"]
-        amp_b = file["status"]["femto"]["amp_B"]
+        data_file = File(
+            f"{self.file_directory}{self.file_folder}{self.file_name}", "r"
+        )
+        femto_data = np.array(data_file.get("status/femto"))
+        time = femto_data["time"]
+        amplification_a = femto_data["amp_A"]
+        amplification_b = femto_data["amp_B"]
         plt.figure(1000, figsize=(6, 1))
-        plt.semilogy(time, amp_a, "-", label="voltage amplification 1")
-        plt.semilogy(time, amp_b, "--", label="voltage amplification 2")
+        plt.semilogy(time, amplification_a, "-", label="voltage amplification 1")
+        plt.semilogy(time, amplification_b, "--", label="voltage amplification 2")
         plt.legend()
         plt.title("Femto Amplifications according to Status")
         plt.xlabel("time (s)")
         plt.ylabel("amplification")
         plt.show()
-
-        # TODO: implement datetime, probably two axes
 
     def setAmplifications(
         self,
@@ -204,8 +204,11 @@ class EvaluationScript:
         """
         logger.info("(%s) showMeasurements()", self._name)
 
-        file = File(f"{self.file_directory}{self.file_folder}{self.file_name}", "r")
-        liste = list(file["measurement"].keys())
+        data_file = File(
+            f"{self.file_directory}{self.file_folder}{self.file_name}", "r"
+        )
+        print(data_file["measurement"].keys)
+        liste = list(data_file["measurement"].keys())
         logger.info("(%s) %s", self._name, liste)
 
     def setMeasurement(self, measurement_key: str):
@@ -219,8 +222,11 @@ class EvaluationScript:
         """
         logger.info("(%s) setMeasurement('%s')", self._name, measurement_key)
         try:
-            file = File(f"{self.file_directory}{self.file_folder}{self.file_name}", "r")
-            self.specific_keys = list(file["measurement"][measurement_key])
+            data_file = File(
+                f"{self.file_directory}{self.file_folder}{self.file_name}", "r"
+            )
+            measurement_data = data_file.get(f"measurement/{measurement_key}")
+            self.specific_keys = list(measurement_data)
             self.measurement_key = measurement_key
         except KeyError:
             self.specific_keys = []
@@ -328,7 +334,7 @@ class EvaluationScript:
 
     def getMaps(
         self,
-        bounds: list[int] = [0, 0],
+        bounds=None,
     ):
         """getMaps()
         - Calculate I and V and split in up / down sweep
@@ -349,8 +355,9 @@ class EvaluationScript:
 
         # Access File
         try:
-            file = File(f"{self.file_directory}{self.file_folder}{self.file_name}", "r")
-            f_keyed = file["measurement"][self.measurement_key]
+            data_file = File(
+                f"{self.file_directory}{self.file_folder}{self.file_name}", "r"
+            )
         except AttributeError:
             logger.error("(%s) File can not be found!", self._name)
             return
@@ -358,16 +365,18 @@ class EvaluationScript:
             logger.error("(%s) Measurement can not be found!", self._name)
             return
 
-        len_V = np.shape(self.voltage_axis)[0]
+        len_voltage = np.shape(self.voltage_axis)[0]
         len_y = np.shape(self.y_unsorted)[0]
 
         # Initialize all values
-        self.current_up = np.full((len_y, len_V), np.nan, dtype="float64")
-        self.current_down = np.full((len_y, len_V), np.nan, dtype="float64")
-        self.time_up = np.full((len_y, len_V), np.nan, dtype="float64")
-        self.time_down = np.full((len_y, len_V), np.nan, dtype="float64")
-        self.temperature_all_up = np.full((len_y, len_V), np.nan, dtype="float64")
-        self.temperature_all_down = np.full((len_y, len_V), np.nan, dtype="float64")
+        self.current_up = np.full((len_y, len_voltage), np.nan, dtype="float64")
+        self.current_down = np.full((len_y, len_voltage), np.nan, dtype="float64")
+        self.time_up = np.full((len_y, len_voltage), np.nan, dtype="float64")
+        self.time_down = np.full((len_y, len_voltage), np.nan, dtype="float64")
+        self.temperature_all_up = np.full((len_y, len_voltage), np.nan, dtype="float64")
+        self.temperature_all_down = np.full(
+            (len_y, len_voltage), np.nan, dtype="float64"
+        )
 
         self.time_up_start = np.full(len_y, np.nan, dtype="float64")
         self.time_up_stop = np.full(len_y, np.nan, dtype="float64")
@@ -378,24 +387,28 @@ class EvaluationScript:
 
         # Iterate over Keys
         for i, k in enumerate(tqdm(self.specific_keys)):
-            # Retrieve Datasets
-            offset = f_keyed[k]["offset"]["adwin"]
-            sweep = f_keyed[k]["sweep"]["adwin"]
-            if "bluefors" in f_keyed[k]["sweep"].keys():
-                temperature = f_keyed[k]["sweep"]["bluefors"]
-            else:
-                temperature = False
-                logger.error("(%s) No temperature data available!", self._name)
 
+            # Retrieve Offset Dataset
+            measurement_data_offset = np.array(
+                data_file.get(f"measurement/{self.measurement_key}/{k}/offset/adwin")
+            )
             # Calculate Offsets
-            self.voltage_offset_1[i] = np.nanmean(offset["V1"])
-            self.voltage_offset_2[i] = np.nanmean(offset["V2"])
+            self.voltage_offset_1[i] = np.nanmean(
+                np.array(measurement_data_offset["V1"])
+            )
+            self.voltage_offset_2[i] = np.nanmean(
+                np.array(measurement_data_offset["V2"])
+            )
 
+            # Retrieve Sweep Dataset
+            measurement_data_sweep = np.array(
+                data_file.get(f"measurement/{self.measurement_key}/{k}/sweep/adwin")
+            )
             # Get Voltage Readings of Adwin
-            trigger = np.array(sweep["trigger"], dtype="int")
-            time = np.array(sweep["time"], dtype="float64")
-            v1 = np.array(sweep["V1"], dtype="float64")
-            v2 = np.array(sweep["V2"], dtype="float64")
+            trigger = np.array(measurement_data_sweep["trigger"], dtype="int")
+            time = np.array(measurement_data_sweep["time"], dtype="float64")
+            v1 = np.array(measurement_data_sweep["V1"], dtype="float64")
+            v2 = np.array(measurement_data_sweep["V2"], dtype="float64")
 
             # Calculate V, I
             v_raw = (v1 - self.voltage_offset_1[i]) / self.voltage_amplification_1
@@ -409,13 +422,13 @@ class EvaluationScript:
                 # Get upsweep
                 v_raw_up = v_raw[trigger == self.trigger_up]
                 i_raw_up = i_raw[trigger == self.trigger_up]
-                t_up = time[trigger == self.trigger_up]
+                time_up = time[trigger == self.trigger_up]
                 # Calculate Timepoints
-                self.time_up_start[i] = t_up[0]
-                self.time_up_stop[i] = t_up[-1]
+                self.time_up_start[i] = time_up[0]
+                self.time_up_stop[i] = time_up[-1]
                 # Bin that stuff
                 i_up, _ = bin_y_over_x(v_raw_up, i_raw_up, self.voltage_axis)
-                time_up, _ = bin_y_over_x(v_raw_up, t_up, self.voltage_axis)
+                time_up, _ = bin_y_over_x(v_raw_up, time_up, self.voltage_axis)
                 # Save to Array
                 self.current_up[i, :] = i_up
                 self.time_up[i, :] = time_up
@@ -424,37 +437,56 @@ class EvaluationScript:
                 # Get dwonsweep
                 v_raw_down = v_raw[trigger == self.trigger_down]
                 i_raw_down = i_raw[trigger == self.trigger_down]
-                t_down = time[trigger == self.trigger_down]
+                time_down = time[trigger == self.trigger_down]
                 # Calculate Timepoints
-                self.time_down_start[i] = t_down[0]
-                self.time_down_stop[i] = t_down[-1]
+                self.time_down_start[i] = time_down[0]
+                self.time_down_stop[i] = time_down[-1]
                 # Bin that stuff
                 i_down, _ = bin_y_over_x(v_raw_down, i_raw_down, self.voltage_axis)
-                time_down, _ = bin_y_over_x(v_raw_down, t_down, self.voltage_axis)
+                time_down, _ = bin_y_over_x(v_raw_down, time_down, self.voltage_axis)
                 # Save to Array
                 self.current_down[i, :] = i_down
                 self.time_down[i, :] = time_down
 
-            # Take care of time and Temperature
-            if temperature:
-                temp_t = temperature["time"]
-                temp_T = temperature["Tsample"]
+            # Retrieve Temperature Dataset
+            if (
+                "bluefors"
+                in data_file.get(f"measurement/{self.measurement_key}/{k}/sweep").keys()
+            ):
+                measurement_data_temperature = np.array(
+                    data_file.get(
+                        f"measurement/{self.measurement_key}/{k}/sweep/bluefors"
+                    )
+                )
+                temporary_time = measurement_data_temperature["time"]
+                temporary_temperature = measurement_data_temperature["Tsample"]
 
                 if self.trigger_up is not None:
-                    temp_t_up = linfit(time_up)
-                    if temp_t_up[0] > temp_t_up[1]:
-                        temp_t_up = np.flip(temp_t_up)
-                    T_up, _ = bin_y_over_x(temp_t, temp_T, temp_t_up, upsampling=1000)
-                    self.temperature_all_up[i, :] = T_up
+                    temporary_time_up = linfit(time_up)
+                    if temporary_time_up[0] > temporary_time_up[1]:
+                        temporary_time_up = np.flip(temporary_time_up)
+                    temperature_up, _ = bin_y_over_x(
+                        temporary_time,
+                        temporary_temperature,
+                        temporary_time_up,
+                        upsampling=1000,
+                    )
+                    self.temperature_all_up[i, :] = temperature_up
 
                 if self.trigger_down is not None:
-                    temp_t_down = linfit(time_down)
-                    if temp_t_down[0] > temp_t_down[1]:
-                        temp_t_down = np.flip(temp_t_down)
-                    T_down, _ = bin_y_over_x(
-                        temp_t, temp_T, temp_t_down, upsampling=1000
+                    temporary_time_down = linfit(time_down)
+                    if temporary_time_down[0] > temporary_time_down[1]:
+                        temporary_time_down = np.flip(temporary_time_down)
+                    temperature_down, _ = bin_y_over_x(
+                        temporary_time,
+                        temporary_temperature,
+                        temporary_time_down,
+                        upsampling=1000,
                     )
-                    self.temperature_all_down[i, :] = T_down
+                    self.temperature_all_down[i, :] = temperature_down
+            else:
+                measurement_data_temperature = False
+                logger.error("(%s) No temperature data available!", self._name)
 
         # sorting afterwards, because of probably unknown characters in keys
         indices = np.argsort(self.y_unsorted)
@@ -476,7 +508,7 @@ class EvaluationScript:
             self.time_down_start = self.time_down_start[indices]
             self.time_down_stop = self.time_down_stop[indices]
 
-        if bounds != [0, 0]:
+        if bounds is not None:
             self.y_axis = self.y_axis[bounds[0] : bounds[1]]
             self.voltage_offset_1 = self.voltage_offset_1[bounds[0] : bounds[1]]
             self.voltage_offset_2 = self.voltage_offset_2[bounds[0] : bounds[1]]
@@ -681,9 +713,9 @@ class EvaluationScript:
 
         if not warning:
             try:
-                x_data = eval(plot_key_x[0])
-                y_data = eval(plot_key_y[0])
-                z_data = eval(plot_key_z[0])
+                x_data = eval(plot_key_x[0])  # pylint: disable=eval-used
+                y_data = eval(plot_key_y[0])  # pylint: disable=eval-used
+                z_data = eval(plot_key_z[0])  # pylint: disable=eval-used
             except AttributeError:
                 logger.warning(
                     "(%s) Required data not found. Check if data is calculated and plot_keys!",
@@ -750,6 +782,7 @@ class EvaluationScript:
         plt.suptitle(title)
 
         self.show_map = {
+            "title": title,
             "fig": fig,
             "ax_z": ax_z,
             "ax_c": ax_c,
@@ -757,6 +790,9 @@ class EvaluationScript:
             "x": x,
             "y": y,
             "z": z,
+            "x_data": x_data,
+            "y_data": y_data,
+            "z_data": z_data,
             "x_lim": x_lim,
             "y_lim": y_lim,
             "z_lim": z_lim,
@@ -771,6 +807,34 @@ class EvaluationScript:
             "z_key": z_key,
             "contrast": self.contrast,
         }
+
+    def reshowMap(
+        self,
+    ):
+        """reshowMap()
+        - shows Figure
+        """
+        logger.info(
+            "(%s) reshowMap()",
+            self._name,
+        )
+        if self.show_map:
+            plot_map(
+                x=self.show_map["x_data"],
+                y=self.show_map["y_data"],
+                z=self.show_map["z_data"],
+                x_lim=self.show_map["x_lim"],
+                y_lim=self.show_map["y_lim"],
+                z_lim=self.show_map["z_lim"],
+                x_label=self.show_map["x_label"],
+                y_label=self.show_map["y_label"],
+                z_label=self.show_map["z_label"],
+                fig_nr=self.show_map["fig_nr"],
+                cmap=self.show_map["cmap"],
+                display_dpi=self.show_map["display_dpi"],
+                contrast=self.show_map["contrast"],
+            )
+            plt.suptitle(self.show_map["title"])
 
     def saveFigure(
         self,
