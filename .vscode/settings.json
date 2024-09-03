@@ -1,6 +1,14 @@
 {
     "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.indexing": false,
     "python.linting.enabled": true,
     "python.linting.pylintEnabled": true,
-    "python.linting.pylintArgs": ["--load-plugins", "pylint_django"]
+    "python.linting.enableonChance": true,
+    "python.linting.pylintArgs": [
+        "--load-plugins", 
+        "pylint_django",
+        "--method-naming-style=camelCase",
+        "--class-naming-style=PascalCase",
+        "-j 0",
+    ]
 }
