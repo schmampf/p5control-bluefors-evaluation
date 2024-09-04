@@ -1,11 +1,11 @@
 """Module providing a function printing python version."""
 
-from importlib import reload
-
 import os
 import platform
 import logging
 import pickle
+
+from importlib import reload
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -22,7 +22,6 @@ from .evaluation_helper_v2 import bin_y_over_x
 from .evaluation_helper_v2 import bin_z_over_y
 from .evaluation_helper_v2 import plot_map
 from .evaluation_helper_v2 import PLOT_KEYS
-
 
 reload(logging)
 logger = logging.getLogger(__name__)
