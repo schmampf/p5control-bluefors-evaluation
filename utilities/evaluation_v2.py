@@ -206,8 +206,7 @@ class EvaluationScript:
         data_file = File(
             f"{self.file_directory}{self.file_folder}{self.file_name}", "r"
         )
-        print(data_file["measurement"].keys)
-        liste = list(data_file["measurement"].keys())
+        liste = list(data_file["measurement"].keys())  # type: ignore
         logger.info("(%s) %s", self._name, liste)
 
     def setMeasurement(self, measurement_key: str):
@@ -225,7 +224,7 @@ class EvaluationScript:
                 f"{self.file_directory}{self.file_folder}{self.file_name}", "r"
             )
             measurement_data = data_file.get(f"measurement/{measurement_key}")
-            self.specific_keys = list(measurement_data)
+            self.specific_keys = list(measurement_data)  # type: ignore
             self.measurement_key = measurement_key
         except KeyError:
             self.specific_keys = []
@@ -448,10 +447,8 @@ class EvaluationScript:
                 self.time_down[i, :] = time_down
 
             # Retrieve Temperature Dataset
-            if (
-                "bluefors"
-                in data_file.get(f"measurement/{self.measurement_key}/{k}/sweep").keys()
-            ):
+            data_set = data_file.get(f"measurement/{self.measurement_key}/{k}/sweep")
+            if "bluefors" in data_set.keys():  # type: ignore
                 measurement_data_temperature = np.array(
                     data_file.get(
                         f"measurement/{self.measurement_key}/{k}/sweep/bluefors"
