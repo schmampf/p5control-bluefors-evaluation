@@ -37,6 +37,7 @@ class EvaluationScript:
     ):
         self._name = name
 
+        # Check working directory
         match platform.system():
             case "Darwin":
                 self.file_directory = "/Users/oliver/Documents/measurement_data/"
