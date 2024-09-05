@@ -9,3 +9,6 @@ from .corporate_design_colors_v4 import cmap, plot_cmap
 
 from .evaluation_v2 import EvaluationScript
 from .evaluation_v2 import EvaluationScript as EvaluationScript_v2
+
+
+from .baseclass import BaseClass
