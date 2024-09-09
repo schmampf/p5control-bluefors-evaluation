@@ -32,7 +32,8 @@ class BaseClass:
             "title": "",
             "sub_folder": "",
             "data_folder": "data/",
-            "ignore_while_saving": [],
+            "figure_folder": "figures/",
+            "ignore_while_saving": ["_name"],
         }
 
         logger.info("(%s) ... BaseClass initialized.", self._name)
