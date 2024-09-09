@@ -3,6 +3,7 @@ Description.
 
 """
 
+import os
 import logging
 
 import numpy as np
@@ -22,13 +23,13 @@ PLOT_KEYS = {
         "self.voltage_axis*1e6",
         r"$V_\mathrm{Bias}^\rightarrow$ (µV)",
     ],
-    "V_bias_up_mV": [
-        "self.voltage_axis*1e3",
-        r"$V_\mathrm{Bias}^\rightarrow$ (mV)",
-    ],
     "V_bias_up_V": [
         "self.voltage_axis*1e0",
         r"$V_\mathrm{Bias}^\rightarrow$ (V)",
+    ],
+    "V_bias_up_mV": [
+        "self.mapped['voltage_axis']*1e3",
+        r"$V_\mathrm{Bias}^\rightarrow$ (mV)",
     ],
     "V_bias_down_µV": [
         "self.voltage_axis*1e6",
@@ -49,7 +50,7 @@ PLOT_KEYS = {
     "T_up_mK": ["self.temperature_mean_up*1e3", r"$T_\mathrm{Sample}$ (mK)"],
     "T_up_K": ["self.temperature_mean_up*1e0", r"$T_\mathrm{Sample}$ (K)"],
     "T_axis_up_K": [
-        "self.temperature_axis",
+        "self.mapped_over_temperature['temperature_axis']",
         r"$T_\mathrm{Sample}^\rightarrow$ (K)",
     ],
     "T_axis_down_K": [
@@ -58,7 +59,7 @@ PLOT_KEYS = {
     ],
     "dIdV_up": ["self.differential_conductance_up", r"d$I/$d$V$ ($G_0$)"],
     "dIdV_up_T": [
-        "self.differential_conductance_up_over_temperature",
+        "self.mapped_over_temperature['differential_conductance_up']",
         r"d$I/$d$V$ ($G_0$)",
     ],
     "dIdV_down": ["self.differential_conductance_down", r"d$I/$d$V$ ($G_0$)"],
@@ -93,10 +94,13 @@ def plot_map(
     y_label: str = r"$y$-label",
     z_label: str = r"$z$-label",
     fig_nr: int = 0,
-    cmap=cmap(color="seeblau", bad="gray"),
+    color_map=cmap(color="seeblau", bad="gray"),
     display_dpi: int = 100,
     contrast: float = 1.0,
 ):
+    """
+    Docstring
+    """
 
     if z.dtype == np.dtype("int32"):
         logger.warning("z is integer. Sure?")
@@ -144,7 +148,7 @@ def plot_map(
         aspect="auto",
         origin="lower",
         clim=z_lim,
-        cmap=cmap,
+        cmap=color_map,
         interpolation="none",
     )
     ax_z.set_xlabel(x_label)
@@ -152,10 +156,10 @@ def plot_map(
     ax_z.ticklabel_format(axis="both", style="sci", scilimits=(-9, 9), useMathText=True)
     ax_z.tick_params(direction="in")
 
-    cbar = fig.colorbar(im, label=z_label, cax=ax_c)
+    _ = fig.colorbar(im, label=z_label, cax=ax_c)
     ax_c.tick_params(direction="in")
-    lim = ax_z.set_xlim(ext[0], ext[1])
-    lim = ax_z.set_ylim(ext[2], ext[3])
+    _ = ax_z.set_xlim(ext[0], ext[1])
+    _ = ax_z.set_ylim(ext[2], ext[3])
 
     plt.show()
 
@@ -191,23 +195,19 @@ class BasePlotting(BaseEvaluation):
             "save_pdf": False,
             "color_map": cmap(color="seeblau", bad="gray"),
             "contrast": 1,
+            "x_lim": [-1.0, 1.0],
+            "y_lim": [-1.0, 1.0],
+            "z_lim": [-1.0, 1.0],
+            "x_key": "V_bias_up_mV",
+            "y_key": "T_axis_up_K",
+            "z_key": "dIdV_up_T",
         }
 
-        self.show_map = {
-            "x_lim": [],
-            "y_lim": [],
-            "z_lim": [],
-        }
+        self.show_map = {}
         logger.info("(%s) ... BasePlotting initialized.", self._name)
 
     def showMap(
         self,
-        x_key: str = "V_bias_up_mV",
-        y_key: str = "y_axis",
-        z_key: str = "dIdV_up",
-        x_lim=None,
-        y_lim=None,
-        z_lim=None,
     ):
         """showMap()
         - checks for synthax errors
@@ -230,21 +230,22 @@ class BasePlotting(BaseEvaluation):
             sets limits on z-Axis / colorbar
         """
 
-        if x_lim is None:
-            x_lim = [-1.0, 1.0]
-        if y_lim is None:
-            y_lim = [-1.0, 1.0]
-        if z_lim is None:
-            z_lim = [-1.0, 1.0]
+        x_key = self.plot["x_key"]
+        y_key = self.plot["y_key"]
+        z_key = self.plot["z_key"]
 
         logger.info(
-            "(%s) showMap(%s, %s)",
+            "(%s) showMap('%s', '%s', '%s')",
             self._name,
-            [x_key, y_key, z_key],
-            [x_lim, y_lim, z_lim],
+            x_key,
+            y_key,
+            z_key,
         )
 
-        print(x_key, type(x_key))
+        x_lim = self.plot["x_lim"]
+        y_lim = self.plot["y_lim"]
+        z_lim = self.plot["z_lim"]
+
         warning = False
 
         try:
@@ -335,7 +336,7 @@ class BasePlotting(BaseEvaluation):
             y_label=y_label,
             z_label=z_label,
             fig_nr=self.plot["fig_nr_show_map"],
-            cmap=self.plot["color_map"],
+            color_map=self.plot["color_map"],
             display_dpi=self.plot["display_dpi"],
             contrast=self.plot["contrast"],
         )
@@ -368,12 +369,12 @@ class BasePlotting(BaseEvaluation):
             "y_label": y_label,
             "z_label": z_label,
             "fig_nr": self.plot["fig_nr_show_map"],
-            "cmap": self.plot["cmap"],
-            "display_dpi": self.display_dpi,
+            "color_map": self.plot["color_map"],
+            "display_dpi": self.plot["display_dpi"],
             "x_key": x_key,
             "y_key": y_key,
             "z_key": z_key,
-            "contrast": self.contrast,
+            "contrast": self.plot["contrast"],
         }
 
     def reshowMap(
@@ -398,7 +399,7 @@ class BasePlotting(BaseEvaluation):
                 y_label=self.show_map["y_label"],
                 z_label=self.show_map["z_label"],
                 fig_nr=self.show_map["fig_nr"],
-                cmap=self.show_map["cmap"],
+                color_map=self.show_map["color_map"],
                 display_dpi=self.show_map["display_dpi"],
                 contrast=self.show_map["contrast"],
             )
@@ -411,23 +412,196 @@ class BasePlotting(BaseEvaluation):
         - safes Figure to self.fig_folder/self.title
         """
         logger.info(
-            "(%s) saveFigure() to %s%s.png", self._name, self.fig_folder, self.title
+            "(%s) saveFigure() to %s%s.png",
+            self._name,
+            self.base["fig_folder"],
+            self.base["title"],
         )
 
         # Handle Title
-        title = f"{self.title}"
+        title = f"{self.base['title']}"
 
         # Handle data folder
-        folder = os.path.join(os.getcwd(), self.fig_folder, self.sub_folder)
+        folder = os.path.join(
+            os.getcwd(), self.base["fig_folder"], self.base["sub_folder"]
+        )
         check = os.path.isdir(folder)
         if not check:
             os.makedirs(folder)
 
         # Save Everything
         name = os.path.join(folder, title)
-        self.show_map["fig"].savefig(f"{name}.png", dpi=self.png_dpi)
-        if self.pdf:  # save as pdf
+        self.show_map["fig"].savefig(f"{name}.png", dpi=self.plot["png_dpi"])
+        if self.plot["save_pdf"]:  # save as pdf
             logger.info(
-                "(%s) saveFigure() to %s%s.pdf", self._name, self.fig_folder, self.title
+                "(%s) saveFigure() to %s%s.pdf",
+                self._name,
+                self.base["fig_folder"],
+                self.base["title"],
             )
-            self.show_map["show_map"].savefig(f"{name}.pdf", dpi=self.pdf_dpi)
+            self.show_map["fig"].savefig(f"{name}.pdf", dpi=self.plot["pdf_dpi"])
+
+    @property
+    def x_key(self):
+        """get x_key"""
+        return self.plot["x_key"]
+
+    @x_key.setter
+    def x_key(self, x_key: str):
+        """set x_key"""
+        self.plot["x_key"] = x_key
+        logger.info("(%s) x_key = %s", self._name, x_key)
+
+    @property
+    def y_key(self):
+        """get y_key"""
+        return self.plot["y_key"]
+
+    @y_key.setter
+    def y_key(self, y_key: str):
+        """set y_key"""
+        self.plot["y_key"] = y_key
+        logger.info("(%s) y_key = %s", self._name, y_key)
+
+    @property
+    def z_key(self):
+        """get z_key"""
+        return self.plot["z_key"]
+
+    @z_key.setter
+    def z_key(self, z_key: str):
+        """set z_key"""
+        self.plot["z_key"] = z_key
+        logger.info("(%s) z_key = %s", self._name, z_key)
+
+    @property
+    def x_lim(self):
+        """get x_lim"""
+        return self.plot["x_lim"]
+
+    @x_lim.setter
+    def x_lim(self, x_lim: list[float]):
+        """set x_lim"""
+        self.plot["x_lim"] = x_lim
+        logger.info("(%s) x_lim = %s", self._name, x_lim)
+
+    @property
+    def y_lim(self):
+        """get y_lim"""
+        return self.plot["y_lim"]
+
+    @y_lim.setter
+    def y_lim(self, y_lim: list[float]):
+        """set y_lim"""
+        self.plot["y_lim"] = y_lim
+        logger.info("(%s) y_lim = %s", self._name, y_lim)
+
+    @property
+    def z_lim(self):
+        """get z_lim"""
+        return self.plot["z_lim"]
+
+    @z_lim.setter
+    def z_lim(self, z_lim: list[float]):
+        """set z_lim"""
+        self.plot["z_lim"] = z_lim
+        logger.info("(%s) z_lim = %s", self._name, z_lim)
+
+    @property
+    def smoothing(self):
+        """get smoothing"""
+        return self.plot["smoothing"]
+
+    @smoothing.setter
+    def smoothing(self, smoothing: bool):
+        """set smoothing"""
+        self.plot["smoothing"] = smoothing
+        logger.info("(%s) smoothing = %s", self._name, smoothing)
+
+    @property
+    def window_length(self):
+        """get window_length"""
+        return self.plot["window_length"]
+
+    @window_length.setter
+    def window_length(self, window_length: int):
+        """set window_length"""
+        self.plot["window_length"] = window_length
+        logger.info("(%s) window_length = %s", self._name, window_length)
+
+    @property
+    def polyorder(self):
+        """get polyorder"""
+        return self.plot["polyorder"]
+
+    @polyorder.setter
+    def polyorder(self, polyorder: int):
+        """set polyorder"""
+        self.plot["polyorder"] = polyorder
+        logger.info("(%s) polyorder = %s", self._name, polyorder)
+
+    @property
+    def display_dpi(self):
+        """get display_dpi"""
+        return self.plot["display_dpi"]
+
+    @display_dpi.setter
+    def display_dpi(self, display_dpi: int):
+        """set display_dpi"""
+        self.plot["display_dpi"] = display_dpi
+        logger.info("(%s) display_dpi = %s", self._name, display_dpi)
+
+    @property
+    def png_dpi(self):
+        """get png_dpi"""
+        return self.plot["png_dpi"]
+
+    @png_dpi.setter
+    def png_dpi(self, png_dpi: int):
+        """set png_dpi"""
+        self.plot["png_dpi"] = png_dpi
+        logger.info("(%s) png_dpi = %s", self._name, png_dpi)
+
+    @property
+    def pdf_dpi(self):
+        """get pdf_dpi"""
+        return self.plot["pdf_dpi"]
+
+    @pdf_dpi.setter
+    def pdf_dpi(self, pdf_dpi: int):
+        """set pdf_dpi"""
+        self.plot["pdf_dpi"] = pdf_dpi
+        logger.info("(%s) pdf_dpi = %s", self._name, pdf_dpi)
+
+    @property
+    def save_pdf(self):
+        """get save_pdf"""
+        return self.plot["save_pdf"]
+
+    @save_pdf.setter
+    def save_pdf(self, save_pdf: bool):
+        """set save_pdf"""
+        self.plot["save_pdf"] = save_pdf
+        logger.info("(%s) save_pdf = %s", self._name, save_pdf)
+
+    @property
+    def color_map(self):
+        """get color_map"""
+        return self.plot["color_map"]
+
+    @color_map.setter
+    def color_map(self, color_map):
+        """set color_map"""
+        self.plot["color_map"] = color_map
+        logger.info("(%s) color_map = %s", self._name, color_map)
+
+    @property
+    def contrast(self):
+        """get contrast"""
+        return self.plot["contrast"]
+
+    @contrast.setter
+    def contrast(self, contrast: float):
+        """set contrast"""
+        self.plot["contrast"] = contrast
+        logger.info("(%s) contrast = %s", self._name, contrast)
