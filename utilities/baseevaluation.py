@@ -18,6 +18,7 @@ from utilities.baseclass import BaseClass
 logger = logging.getLogger(__name__)
 
 POSSIBLE_MEASUREMENT_KEYS = {
+    "magnetic_fields": [7, -2, 1e-3, "no_field"],
     "temperatures": [7, -3, 1e-6, "no_heater"],
     "temperatures_up": [7, -2, 1e-6, "no_heater"],
     "gate_voltages": [5, -2, 1e-3, "no_gate"],
@@ -379,6 +380,14 @@ class BaseEvaluation(BaseClass):
         y = np.array(y)
 
         self.general["y_unsorted"] = y
+
+    def addKey(
+        self,
+        key,
+        y_value,
+    ):
+        # TODO
+        pass
 
     def setV(
         self,
