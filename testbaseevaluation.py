@@ -7,6 +7,7 @@ from utilities.baseevaluation import BaseEvaluation
 be = BaseEvaluation("base eva")
 be.base["title"] = "test_baseevaluation"
 be.base["data_folder"] = ".test/"
+be.base["figure_folder"] = ".test/"
 be.base["sub_folder"] = ""
 
 be.file["folder"] = "24 07 OI-24d-10/unbroken/24 08 13 temperature study/"
@@ -26,3 +27,6 @@ be.getMapsT()
 be.saveData()
 be.loadData()
 be.showData()
+
+be.base["title"] = "test_baseplotting"
+be.saveData()
