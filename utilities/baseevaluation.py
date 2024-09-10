@@ -383,11 +383,25 @@ class BaseEvaluation(BaseClass):
 
     def addKey(
         self,
-        key,
-        y_value,
+        key: str,
+        y_value: float,
     ):
-        # TODO
-        pass
+        """
+        Adds Key to Specific Key List and Y-Value to unsorted Y-Values.
+
+        Parameters
+        ----------
+        key : str
+            key to add to specific keys
+        y_value : float
+            y_value to add to y_unsorted array
+        """
+        logger.info("(%s) addKey(%s, %s)", self._name, key, y_value)
+
+        self.general["specific_keys"].append(key)
+        self.general["y_unsorted"] = np.concatenate(
+            (self.general["y_unsorted"], [y_value])
+        )
 
     def setV(
         self,
