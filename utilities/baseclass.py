@@ -49,10 +49,12 @@ class BaseClass:
 
         # Handle Title
         if title is None:
-            title = f"{self.base["title"]}.pickle"
+            title = f"{self.base['title']}.pickle"
 
         # Handle data folder
-        folder = os.path.join(os.getcwd(), self.base["data_folder"], self.base["sub_folder"])
+        folder = os.path.join(
+            os.getcwd(), self.base["data_folder"], self.base["sub_folder"]
+        )
         check = os.path.isdir(folder)
         if not check and self.base["data_folder"] != "":
             os.makedirs(folder)
@@ -64,7 +66,9 @@ class BaseClass:
                 data[key] = value
 
         # save data to pickle
-        name = os.path.join(os.getcwd(), self.base["data_folder"], self.base["sub_folder"], title)
+        name = os.path.join(
+            os.getcwd(), self.base["data_folder"], self.base["sub_folder"], title
+        )
         with open(name, "wb") as file:
             pickle.dump(data, file)
 
@@ -79,10 +83,12 @@ class BaseClass:
 
         # Handle Title
         if title is None:
-            title = f"{self.base["title"]}.pickle"
+            title = f"{self.base['title']}.pickle"
 
         # get data from pickle
-        name = os.path.join(os.getcwd(), self.base["data_folder"], self.base["sub_folder"], title)
+        name = os.path.join(
+            os.getcwd(), self.base["data_folder"], self.base["sub_folder"], title
+        )
         with open(name, "rb") as file:
             data = pickle.load(file)
 
