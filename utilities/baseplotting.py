@@ -4,7 +4,9 @@ Description.
 """
 
 import os
+import sys
 import logging
+import importlib
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -19,6 +21,9 @@ from utilities.baseplotting_functions import plot_test_map
 from utilities.baseplotting_functions import plot_map
 from utilities.baseplotting_functions import plot_map_vector
 
+importlib.reload(sys.modules["utilities.baseplotting_functions"])
+importlib.reload(sys.modules["utilities.baseevaluation"])
+importlib.reload(sys.modules["utilities.corporate_design_colors_v4"])
 
 logger = logging.getLogger(__name__)
 
@@ -41,11 +46,13 @@ class BasePlotting(BaseEvaluation):
         self.possible_plot_keys = PLOT_KEYS
 
         self.plot = {
+            "inverted": False,
             "smoothing": True,
             "window_length": 20,
             "polyorder": 2,
             "fig_nr_show_map": 0,
             "fig_nr_show_map_vector": 1,
+            "fig_nr_IV": 2,
             "display_dpi": 100,
             "png_dpi": 600,
             "pdf_dpi": 600,
@@ -59,10 +66,12 @@ class BasePlotting(BaseEvaluation):
             "y_lim": [None, None],
             "z_lim": [None, None],
             "n_lim": [None, None],
+            "i_lim": [None, None],
             "x_key": "V_bias_up_mV",
             "y_key": "y_axis",
             "z_key": "dIdV_up",
             "n_key": "T_up_K",
+            "i_key": "I_up_A",
         }
 
         self.show_map = {}
@@ -189,6 +198,7 @@ class BasePlotting(BaseEvaluation):
             x_label=x_label,
             y_label=y_label,
             z_label=z_label,
+            inverted=self.plot["inverted"],
             fig_nr=self.plot["fig_nr_show_map"],
             color_map=self.plot["color_map"],
             display_dpi=self.plot["display_dpi"],
@@ -213,6 +223,7 @@ class BasePlotting(BaseEvaluation):
             "x_label": x_label,
             "y_label": y_label,
             "z_label": z_label,
+            "inverted": self.plot["inverted"],
             "fig_nr": self.plot["fig_nr_show_map"],
             "color_map": self.plot["color_map"],
             "display_dpi": self.plot["display_dpi"],
@@ -241,6 +252,7 @@ class BasePlotting(BaseEvaluation):
                 x_label=self.show_map["x_label"],
                 y_label=self.show_map["y_label"],
                 z_label=self.show_map["z_label"],
+                inverted=self.show_map["inverted"],
                 fig_nr=self.show_map["fig_nr"],
                 color_map=self.show_map["color_map"],
                 display_dpi=self.show_map["display_dpi"],
@@ -259,7 +271,10 @@ class BasePlotting(BaseEvaluation):
             self.base["figure_folder"],
             self.base["title"],
         )
-        self.saveFigure(figure=self.show_map["fig"], string=" Map")
+        string = " Map"
+        if self.show_map["inverted"]:
+            string += "Inverted"
+        self.saveFigure(figure=self.show_map["fig"], string=string)
 
     def showMapVector(
         self,
@@ -270,7 +285,7 @@ class BasePlotting(BaseEvaluation):
         """
 
         logger.info(
-            "(%s) showMap('%s', '%s', '%s', '%s')",
+            "(%s) showMapVector('%s', '%s', '%s', '%s')",
             self._name,
             self.plot["x_key"],
             self.plot["y_key"],
@@ -302,6 +317,12 @@ class BasePlotting(BaseEvaluation):
             plot_key_n = self.possible_plot_keys[self.plot["n_key"]]
         except KeyError:
             logger.warning("(%s) n_key not found.", self._name)
+            warning = True
+
+        try:
+            plot_key_i = self.possible_plot_keys[self.plot["i_key"]]
+        except KeyError:
+            logger.warning("(%s) i_key not found.", self._name)
             warning = True
 
         if warning:
@@ -345,6 +366,7 @@ class BasePlotting(BaseEvaluation):
             y_label=y_label,
             z_label=z_label,
             n_label=n_label,
+            inverted=self.plot["inverted"],
             fig_nr=self.plot["fig_nr_show_map_vector"],
             color_map=self.plot["color_map"],
             display_dpi=self.plot["display_dpi"],
@@ -377,6 +399,7 @@ class BasePlotting(BaseEvaluation):
             "y_label": y_label,
             "z_label": z_label,
             "n_label": n_label,
+            "inverted": self.plot["inverted"],
             "fig_nr": self.plot["fig_nr_show_map_vector"],
             "color_map": self.plot["color_map"],
             "display_dpi": self.plot["display_dpi"],
@@ -411,6 +434,7 @@ class BasePlotting(BaseEvaluation):
                 y_label=self.show_map_vector["y_label"],
                 z_label=self.show_map_vector["z_label"],
                 n_label=self.show_map_vector["n_label"],
+                inverted=self.show_map_vector["inverted"],
                 fig_nr=self.show_map_vector["fig_nr"],
                 color_map=self.show_map_vector["color_map"],
                 display_dpi=self.show_map_vector["display_dpi"],
@@ -432,7 +456,10 @@ class BasePlotting(BaseEvaluation):
             self.base["figure_folder"],
             self.base["title"],
         )
-        self.saveFigure(figure=self.show_map_vector["fig"], string=" MapVector")
+        string = " MapVector"
+        if self.show_map_vector["inverted"]:
+            string += "Inverted"
+        self.saveFigure(figure=self.show_map_vector["fig"], string=string)
 
     @property
     def x_key(self):
@@ -468,15 +495,26 @@ class BasePlotting(BaseEvaluation):
         logger.info("(%s) z_key = %s", self._name, z_key)
 
     @property
-    def n_keys(self):
-        """get n_keys"""
-        return self.plot["n_keys"]
+    def n_key(self):
+        """get n_key"""
+        return self.plot["n_key"]
 
-    @n_keys.setter
-    def n_keys(self, n_keys: str):
-        """set n_keys"""
-        self.plot["n_keys"] = n_keys
-        logger.info("(%s) n_keys = %s", self._name, n_keys)
+    @n_key.setter
+    def n_key(self, n_key: str):
+        """set n_key"""
+        self.plot["n_key"] = n_key
+        logger.info("(%s) n_key = %s", self._name, n_key)
+
+    @property
+    def i_key(self):
+        """get i_key"""
+        return self.plot["i_key"]
+
+    @i_key.setter
+    def i_key(self, i_key: str):
+        """set i_key"""
+        self.plot["i_key"] = i_key
+        logger.info("(%s) i_key = %s", self._name, i_key)
 
     @property
     def x_lim(self):
@@ -523,6 +561,28 @@ class BasePlotting(BaseEvaluation):
         logger.info("(%s) n_lim = %s", self._name, n_lim)
 
     @property
+    def i_lim(self):
+        """get i_lim"""
+        return self.plot["i_lim"]
+
+    @i_lim.setter
+    def i_lim(self, i_lim: list):
+        """set i_lim"""
+        self.plot["i_lim"] = i_lim
+        logger.info("(%s) i_lim = %s", self._name, i_lim)
+
+    @property
+    def inverted(self):
+        """get inverted"""
+        return self.plot["inverted"]
+
+    @inverted.setter
+    def inverted(self, inverted: bool):
+        """set inverted"""
+        self.plot["inverted"] = inverted
+        logger.info("(%s) inverted = %s", self._name, inverted)
+
+    @property
     def smoothing(self):
         """get smoothing"""
         return self.plot["smoothing"]
@@ -565,6 +625,30 @@ class BasePlotting(BaseEvaluation):
         """set fig_nr_show_map"""
         self.plot["fig_nr_show_map"] = fig_nr_show_map
         logger.info("(%s) fig_nr_show_map = %s", self._name, fig_nr_show_map)
+
+    @property
+    def fig_nr_show_map_vector(self):
+        """get fig_nr_show_map_vector"""
+        return self.plot["fig_nr_show_map_vector"]
+
+    @fig_nr_show_map_vector.setter
+    def fig_nr_show_map_vector(self, fig_nr_show_map_vector: int):
+        """set fig_nr_show_map_vector"""
+        self.plot["fig_nr_show_map_vector"] = fig_nr_show_map_vector
+        logger.info(
+            "(%s) fig_nr_show_map_vector = %s", self._name, fig_nr_show_map_vector
+        )
+
+    @property
+    def fig_nr_iv(self):
+        """get fig_nr_iv"""
+        return self.plot["fig_nr_iv"]
+
+    @fig_nr_iv.setter
+    def fig_nr_iv(self, fig_nr_iv: int):
+        """set fig_nr_iv"""
+        self.plot["fig_nr_iv"] = fig_nr_iv
+        logger.info("(%s) fig_nr_iv = %s", self._name, fig_nr_iv)
 
     @property
     def display_dpi(self):
@@ -664,3 +748,128 @@ class BasePlotting(BaseEvaluation):
         """set vector_lwms"""
         self.plot["vector_lwms"] = vector_lwms
         logger.info("(%s) vector_lwms = %s", self._name, vector_lwms)
+
+    def showIV(
+        self,
+        indices=None,
+        values=None,
+    ):
+        """showIV()"""
+        logger.info(
+            "(%s) showIV('%s', '%s', '%s', '%s', '%s')",
+            self._name,
+            self.plot["x_key"],
+            self.plot["y_key"],
+            self.plot["z_key"],
+            self.plot["n_key"],
+            self.plot["i_key"],
+        )
+
+        plot_key_x = self.possible_plot_keys[self.plot["x_key"]]
+        plot_key_y = self.possible_plot_keys[self.plot["y_key"]]
+        plot_key_z = self.possible_plot_keys[self.plot["z_key"]]
+        plot_key_n = self.possible_plot_keys[self.plot["n_key"]]
+        plot_key_i = self.possible_plot_keys[self.plot["i_key"]]
+
+        x_data = eval(plot_key_x[0])  # pylint: disable=eval-used
+        y_data = eval(plot_key_y[0])  # pylint: disable=eval-used
+        z_data = eval(plot_key_z[0])  # pylint: disable=eval-used
+        n_data = eval(plot_key_n[0])  # pylint: disable=eval-used
+        i_data = eval(plot_key_i[0])  # pylint: disable=eval-used
+
+        x_label = plot_key_x[1]
+        y_label = plot_key_y[1]
+        z_label = plot_key_z[1]
+        n_label = plot_key_n[1]
+        i_label = plot_key_i[1]
+
+        if self.plot["smoothing"]:
+            z_data = savgol_filter(
+                z_data,
+                window_length=self.plot["window_length"],
+                polyorder=self.plot["polyorder"],
+            )
+            i_data = savgol_filter(
+                i_data,
+                window_length=self.plot["window_length"],
+                polyorder=self.plot["polyorder"],
+            )
+
+        if indices is None:
+            indices = []
+        if values is not None:
+            for value in values:
+                indices.append(int(np.argmin(np.abs(y_data - value))))
+        if indices == []:
+            indices.append(0)
+
+        display_dpi = 100
+        fig_nr = 2
+
+        plt.close(fig_nr)
+        fig, axs = plt.subplots(
+            num=fig_nr,
+            nrows=2,
+            ncols=2,
+            figsize=(6, 4),
+            dpi=display_dpi,
+            gridspec_kw={"height_ratios": [3, 2], "width_ratios": [5, 1]},
+            constrained_layout=True,
+        )
+
+        ax_i = axs[0, 0]
+        ax_didv = axs[1, 0]
+        gs = axs[0, 1].get_gridspec()
+        axs[0, 1].remove()
+        axs[1, 1].remove()
+        ax_y = fig.add_subplot(gs[0:, -1])
+
+        ax_i.ticklabel_format(
+            axis="both", style="sci", scilimits=(-9, 9), useMathText=True
+        )
+        ax_i.tick_params(direction="in", right=True, top=True)
+        ax_i.set_xticklabels([])
+        ax_didv.ticklabel_format(
+            axis="both", style="sci", scilimits=(-9, 9), useMathText=True
+        )
+        ax_didv.tick_params(direction="in", right=True, top=True)
+        ax_y.ticklabel_format(
+            axis="both", style="sci", scilimits=(-9, 9), useMathText=True
+        )
+        ax_y.tick_params(direction="in", right=True, top=True)
+        ax_y.yaxis.set_label_position("right")
+        ax_y.yaxis.tick_right()
+        ax_y.invert_xaxis()
+
+        ax_didv.set_xlabel(x_label)
+        ax_didv.set_ylabel(z_label)
+        ax_i.set_ylabel(i_label)
+        ax_y.set_xlabel(n_label)
+        ax_y.set_ylabel(y_label)
+        fig.suptitle(self.base["title"])
+
+        ax_i.grid()
+        ax_didv.grid()
+        ax_y.grid()
+
+        ax_y.plot(n_data, y_data, color="grey")
+        n_lim = ax_y.set_xlim(self.plot["n_lim"])
+        for index in indices:
+            ax_i.plot(
+                x_data,
+                i_data[index, :],
+                label=f"{y_label} = {y_data[index]:04.02}",  #
+            )
+            ax_didv.plot(
+                x_data, z_data[index, :], label=f"{n_label} = {n_data[index]:04.02}"
+            )
+            ax_y.plot(n_lim, [y_data[index], y_data[index]], lw=2)
+
+        ax_i.set_xlim(self.plot["x_lim"])
+        ax_i.set_ylim(self.plot["i_lim"])
+        ax_didv.set_xlim(self.plot["x_lim"])
+        ax_didv.set_ylim(self.plot["z_lim"])
+        ax_y.set_ylim(self.plot["y_lim"])
+
+        ax_i.sharex(ax_didv)
+        plt.setp(ax_i.get_xticklabels(), visible=False)
