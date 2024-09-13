@@ -400,3 +400,94 @@ def plot_map_vector(
         plt.setp(ax_z.get_xticklabels(), visible=False)
 
     return fig, ax_z, ax_c, ax_n
+
+
+def plot_iv(
+    indices: list,
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    n: np.ndarray,
+    i: np.ndarray,
+    x_lim: list,
+    y_lim: list,
+    z_lim: list,
+    n_lim: list,
+    i_lim: list,
+    x_label: str = r"$x$-label",
+    y_label: str = r"$y$-label",
+    z_label: str = r"$z$-label",
+    n_label: str = r"$n$-label",
+    i_label: str = r"$i$-label",
+    fig_nr: int = 2,
+    display_dpi: int = 100,
+    vector_color=None,
+    vector_style="-",
+    vector_lwms=1,
+):
+    """
+    Docstring
+    """
+
+    plt.close(fig_nr)
+    fig, axs = plt.subplots(
+        num=fig_nr,
+        nrows=2,
+        ncols=2,
+        figsize=(6, 4),
+        dpi=display_dpi,
+        gridspec_kw={"height_ratios": [3, 2], "width_ratios": [5, 1]},
+        constrained_layout=True,
+    )
+
+    ax_i = axs[0, 0]
+    ax_didv = axs[1, 0]
+    gs = axs[0, 1].get_gridspec()
+    axs[0, 1].remove()
+    axs[1, 1].remove()
+    ax_y = fig.add_subplot(gs[0:, -1])
+
+    ax_i.ticklabel_format(axis="both", style="sci", scilimits=(-9, 9), useMathText=True)
+    ax_i.tick_params(direction="in", right=True, top=True)
+    ax_i.set_xticklabels([])
+    ax_didv.ticklabel_format(
+        axis="both", style="sci", scilimits=(-9, 9), useMathText=True
+    )
+    ax_didv.tick_params(direction="in", right=True, top=True)
+    ax_y.ticklabel_format(axis="both", style="sci", scilimits=(-9, 9), useMathText=True)
+    ax_y.tick_params(direction="in", right=True, top=True)
+    ax_y.yaxis.set_label_position("right")
+    ax_y.yaxis.tick_right()
+    ax_y.invert_xaxis()
+
+    ax_didv.set_xlabel(x_label)
+    ax_didv.set_ylabel(z_label)
+    ax_i.set_ylabel(i_label)
+    ax_y.set_xlabel(n_label)
+    ax_y.set_ylabel(y_label)
+
+    ax_i.grid()
+    ax_didv.grid()
+    ax_y.grid()
+
+    ax_y.plot(n, y, vector_style, color=vector_color, lw=vector_lwms, ms=vector_lwms)
+    n_lim = ax_y.set_xlim(n_lim)
+    for index in indices:
+        ax_i.plot(
+            x,
+            i[index, :],
+            label=f"{y_label} = {y[index]:04.02}",  #
+        )
+        ax_didv.plot(x, z[index, :], label=f"{n_label} = {n[index]:04.02}")
+        ax_y.plot(n_lim, [y[index], y[index]], lw=2)
+
+    ax_i.set_xlim(x_lim)
+    ax_i.set_ylim(i_lim)
+    ax_didv.set_xlim(x_lim)
+    ax_didv.set_ylim(z_lim)
+    ax_y.set_ylim(y_lim)
+
+    ax_i.sharex(ax_didv)
+    plt.setp(ax_i.get_xticklabels(), visible=False)
+
+    return fig, ax_i, ax_didv, ax_y
