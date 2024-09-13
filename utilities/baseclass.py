@@ -59,11 +59,11 @@ class BaseClass:
         }
         logger.info("(%s) ... BaseClass initialized.", self._name)
 
-    def viewFile(self):
+    def showFile(self):
         """
         Opens hdf5view GUI to look into hdf5 file.
         """
-        logger.info("(%s) viewFile()", self._name)
+        logger.info("(%s) showFile()", self._name)
 
         file_name = f"{self.base['file_directory']}{self.base['file_folder']}{self.base['file_name']}"
         app = QApplication(sys.argv)
