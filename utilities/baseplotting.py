@@ -20,6 +20,7 @@ from utilities.baseplotting_functions import PLOT_KEYS
 from utilities.baseplotting_functions import plot_test_map
 from utilities.baseplotting_functions import plot_map
 from utilities.baseplotting_functions import plot_map_vector
+from utilities.baseplotting_functions import plot_iv
 
 importlib.reload(sys.modules["utilities.baseplotting_functions"])
 importlib.reload(sys.modules["utilities.baseevaluation"])
@@ -39,7 +40,8 @@ class BasePlotting(BaseEvaluation):
     ):
         """
         Description
-        Keep in mind that x_lim, etc. the first entry should be smaller than the second. None is also possible.
+        Keep in mind that x_lim, etc. the first entry should be smaller than the second.
+        None is also possible.
         """
         super().__init__(name=name)
 
@@ -76,12 +78,13 @@ class BasePlotting(BaseEvaluation):
 
         self.show_map = {}
         self.show_map_vector = {}
+        self.show_iv = {}
         logger.info("(%s) ... BasePlotting initialized.", self._name)
 
     def saveFigure(
         self,
         figure,
-        string,
+        subtitle,
     ):
         """saveFigure()
         - safes Figure to self.figure_folder/self.title
@@ -92,15 +95,18 @@ class BasePlotting(BaseEvaluation):
 
         # Handle data folder
         folder = os.path.join(
-            os.getcwd(), self.base["figure_folder"], self.base["sub_folder"]
+            os.getcwd(),
+            self.base["figure_folder"],
+            self.base["sub_folder"],
+            self.base["title"],
         )
         check = os.path.isdir(folder)
         if not check:
             os.makedirs(folder)
 
         # Save Everything
-        name = os.path.join(folder, title)
-        figure.savefig(f"{name}{string}.png", dpi=self.plot["png_dpi"])
+        name = os.path.join(folder, subtitle)
+        figure.savefig(f"{name}.png", dpi=self.plot["png_dpi"])
         if self.plot["save_pdf"]:  # save as pdf
             logger.info(
                 "(%s) saveFigure() to %s%s.pdf",
@@ -108,7 +114,7 @@ class BasePlotting(BaseEvaluation):
                 self.base["figure_folder"],
                 self.base["title"],
             )
-            figure.savefig(f"{name}{string}.pdf", dpi=self.plot["pdf_dpi"])
+            figure.savefig(f"{name}.pdf", dpi=self.plot["pdf_dpi"])
 
     def showMap(
         self,
@@ -271,10 +277,10 @@ class BasePlotting(BaseEvaluation):
             self.base["figure_folder"],
             self.base["title"],
         )
-        string = " Map"
+        string = "Map"
         if self.show_map["inverted"]:
             string += "Inverted"
-        self.saveFigure(figure=self.show_map["fig"], string=string)
+        self.saveFigure(figure=self.show_map["fig"], subtitle=string)
 
     def showMapVector(
         self,
@@ -317,12 +323,6 @@ class BasePlotting(BaseEvaluation):
             plot_key_n = self.possible_plot_keys[self.plot["n_key"]]
         except KeyError:
             logger.warning("(%s) n_key not found.", self._name)
-            warning = True
-
-        try:
-            plot_key_i = self.possible_plot_keys[self.plot["i_key"]]
-        except KeyError:
-            logger.warning("(%s) i_key not found.", self._name)
             warning = True
 
         if warning:
@@ -456,10 +456,161 @@ class BasePlotting(BaseEvaluation):
             self.base["figure_folder"],
             self.base["title"],
         )
-        string = " MapVector"
+        string = "MapVector"
         if self.show_map_vector["inverted"]:
             string += "Inverted"
-        self.saveFigure(figure=self.show_map_vector["fig"], string=string)
+        self.saveFigure(figure=self.show_map_vector["fig"], subtitle=string)
+
+    def showIV(
+        self,
+        indices=None,
+        values=None,
+    ):
+        """showIV()"""
+        logger.info(
+            "(%s) showIV('%s', '%s', '%s', '%s', '%s')",
+            self._name,
+            self.plot["x_key"],
+            self.plot["y_key"],
+            self.plot["z_key"],
+            self.plot["n_key"],
+            self.plot["i_key"],
+        )
+        ppk = self.possible_plot_keys
+        x_data = eval(ppk[self.plot["x_key"]][0])  # pylint: disable=eval-used
+        y_data = eval(ppk[self.plot["y_key"]][0])  # pylint: disable=eval-used
+        z_data = eval(ppk[self.plot["z_key"]][0])  # pylint: disable=eval-used
+        n_data = eval(ppk[self.plot["n_key"]][0])  # pylint: disable=eval-used
+        i_data = eval(ppk[self.plot["i_key"]][0])  # pylint: disable=eval-used
+
+        if self.plot["smoothing"]:
+            z_data = savgol_filter(
+                z_data,
+                window_length=self.plot["window_length"],
+                polyorder=self.plot["polyorder"],
+            )
+            i_data = savgol_filter(
+                i_data,
+                window_length=self.plot["window_length"],
+                polyorder=self.plot["polyorder"],
+            )
+
+        if indices is None:
+            indices = []
+        if values is not None:
+            for value in values:
+                indices.append(int(np.argmin(np.abs(y_data - value))))
+        if indices == []:
+            indices.append(0)
+
+        fig, ax_i, ax_didv, ax_y = plot_iv(
+            indices=indices,
+            x=x_data,
+            y=y_data,
+            z=z_data,
+            n=n_data,
+            i=i_data,
+            x_lim=self.plot["x_lim"],
+            y_lim=self.plot["y_lim"],
+            z_lim=self.plot["z_lim"],
+            n_lim=self.plot["n_lim"],
+            i_lim=self.plot["i_lim"],
+            x_label=ppk[self.plot["x_key"]][1],
+            y_label=ppk[self.plot["y_key"]][1],
+            z_label=ppk[self.plot["z_key"]][1],
+            n_label=ppk[self.plot["n_key"]][1],
+            i_label=ppk[self.plot["i_key"]][1],
+            fig_nr=self.plot["fig_nr_IV"],
+            display_dpi=self.plot["display_dpi"],
+            vector_color=self.plot["vector_color"],
+            vector_style=self.plot["vector_style"],
+            vector_lwms=self.plot["vector_lwms"],
+        )
+        fig.suptitle(self.base["title"])
+
+        self.show_iv = {
+            "title": self.base["title"],
+            "indices": indices,
+            "fig": fig,
+            "ax_i": ax_i,
+            "ax_didv": ax_didv,
+            "ax_y": ax_y,
+            "x_key": self.plot["x_key"],
+            "y_key": self.plot["y_key"],
+            "z_key": self.plot["z_key"],
+            "n_key": self.plot["n_key"],
+            "i_key": self.plot["i_key"],
+            "x_lim": self.plot["x_lim"],
+            "y_lim": self.plot["y_lim"],
+            "z_lim": self.plot["z_lim"],
+            "n_lim": self.plot["n_lim"],
+            "i_lim": self.plot["i_lim"],
+            "x_data": x_data,
+            "y_data": y_data,
+            "z_data": z_data,
+            "n_data": n_data,
+            "i_data": i_data,
+            "x_label": ppk[self.plot["x_key"]][1],
+            "y_label": ppk[self.plot["y_key"]][1],
+            "z_label": ppk[self.plot["z_key"]][1],
+            "n_label": ppk[self.plot["n_key"]][1],
+            "i_label": ppk[self.plot["i_key"]][1],
+            "fig_nr": self.plot["fig_nr_show_map_vector"],
+            "display_dpi": self.plot["display_dpi"],
+            "vector_color": self.plot["vector_color"],
+            "vector_style": self.plot["vector_style"],
+            "vector_lwms": self.plot["vector_lwms"],
+        }
+        plt.show()
+
+    def reshowIV(
+        self,
+    ):
+        """reshowIV()
+        - reshows IV
+        """
+        logger.info(
+            "(%s) reshowIV()",
+            self._name,
+        )
+        plot_iv(
+            indices=self.show_iv["indices"],
+            x=self.show_iv["x_data"],
+            y=self.show_iv["y_data"],
+            z=self.show_iv["z_data"],
+            n=self.show_iv["n_data"],
+            i=self.show_iv["i_data"],
+            x_lim=self.show_iv["x_lim"],
+            y_lim=self.show_iv["y_lim"],
+            z_lim=self.show_iv["z_lim"],
+            n_lim=self.show_iv["n_lim"],
+            i_lim=self.show_iv["i_lim"],
+            x_label=self.show_iv["x_label"],
+            y_label=self.show_iv["y_label"],
+            z_label=self.show_iv["z_label"],
+            n_label=self.show_iv["n_label"],
+            i_label=self.show_iv["i_label"],
+            fig_nr=self.show_iv["fig_nr"],
+            display_dpi=self.show_iv["display_dpi"],
+            vector_color=self.show_iv["vector_color"],
+            vector_style=self.show_iv["vector_style"],
+            vector_lwms=self.show_iv["vector_lwms"],
+        )
+        plt.suptitle(self.show_iv["title"])
+        plt.show()
+
+    def saveIV(self):
+        """saveIV()
+        - safes Figure to self.figure_folder/self.title
+        """
+        logger.info(
+            "(%s) saveIV() to %s%s.png",
+            self._name,
+            self.base["figure_folder"],
+            self.base["title"],
+        )
+        string = f"IV {self.show_iv['indices']}"
+        self.saveFigure(figure=self.show_iv["fig"], subtitle=string)
 
     @property
     def x_key(self):
@@ -748,128 +899,3 @@ class BasePlotting(BaseEvaluation):
         """set vector_lwms"""
         self.plot["vector_lwms"] = vector_lwms
         logger.info("(%s) vector_lwms = %s", self._name, vector_lwms)
-
-    def showIV(
-        self,
-        indices=None,
-        values=None,
-    ):
-        """showIV()"""
-        logger.info(
-            "(%s) showIV('%s', '%s', '%s', '%s', '%s')",
-            self._name,
-            self.plot["x_key"],
-            self.plot["y_key"],
-            self.plot["z_key"],
-            self.plot["n_key"],
-            self.plot["i_key"],
-        )
-
-        plot_key_x = self.possible_plot_keys[self.plot["x_key"]]
-        plot_key_y = self.possible_plot_keys[self.plot["y_key"]]
-        plot_key_z = self.possible_plot_keys[self.plot["z_key"]]
-        plot_key_n = self.possible_plot_keys[self.plot["n_key"]]
-        plot_key_i = self.possible_plot_keys[self.plot["i_key"]]
-
-        x_data = eval(plot_key_x[0])  # pylint: disable=eval-used
-        y_data = eval(plot_key_y[0])  # pylint: disable=eval-used
-        z_data = eval(plot_key_z[0])  # pylint: disable=eval-used
-        n_data = eval(plot_key_n[0])  # pylint: disable=eval-used
-        i_data = eval(plot_key_i[0])  # pylint: disable=eval-used
-
-        x_label = plot_key_x[1]
-        y_label = plot_key_y[1]
-        z_label = plot_key_z[1]
-        n_label = plot_key_n[1]
-        i_label = plot_key_i[1]
-
-        if self.plot["smoothing"]:
-            z_data = savgol_filter(
-                z_data,
-                window_length=self.plot["window_length"],
-                polyorder=self.plot["polyorder"],
-            )
-            i_data = savgol_filter(
-                i_data,
-                window_length=self.plot["window_length"],
-                polyorder=self.plot["polyorder"],
-            )
-
-        if indices is None:
-            indices = []
-        if values is not None:
-            for value in values:
-                indices.append(int(np.argmin(np.abs(y_data - value))))
-        if indices == []:
-            indices.append(0)
-
-        display_dpi = 100
-        fig_nr = 2
-
-        plt.close(fig_nr)
-        fig, axs = plt.subplots(
-            num=fig_nr,
-            nrows=2,
-            ncols=2,
-            figsize=(6, 4),
-            dpi=display_dpi,
-            gridspec_kw={"height_ratios": [3, 2], "width_ratios": [5, 1]},
-            constrained_layout=True,
-        )
-
-        ax_i = axs[0, 0]
-        ax_didv = axs[1, 0]
-        gs = axs[0, 1].get_gridspec()
-        axs[0, 1].remove()
-        axs[1, 1].remove()
-        ax_y = fig.add_subplot(gs[0:, -1])
-
-        ax_i.ticklabel_format(
-            axis="both", style="sci", scilimits=(-9, 9), useMathText=True
-        )
-        ax_i.tick_params(direction="in", right=True, top=True)
-        ax_i.set_xticklabels([])
-        ax_didv.ticklabel_format(
-            axis="both", style="sci", scilimits=(-9, 9), useMathText=True
-        )
-        ax_didv.tick_params(direction="in", right=True, top=True)
-        ax_y.ticklabel_format(
-            axis="both", style="sci", scilimits=(-9, 9), useMathText=True
-        )
-        ax_y.tick_params(direction="in", right=True, top=True)
-        ax_y.yaxis.set_label_position("right")
-        ax_y.yaxis.tick_right()
-        ax_y.invert_xaxis()
-
-        ax_didv.set_xlabel(x_label)
-        ax_didv.set_ylabel(z_label)
-        ax_i.set_ylabel(i_label)
-        ax_y.set_xlabel(n_label)
-        ax_y.set_ylabel(y_label)
-        fig.suptitle(self.base["title"])
-
-        ax_i.grid()
-        ax_didv.grid()
-        ax_y.grid()
-
-        ax_y.plot(n_data, y_data, color="grey")
-        n_lim = ax_y.set_xlim(self.plot["n_lim"])
-        for index in indices:
-            ax_i.plot(
-                x_data,
-                i_data[index, :],
-                label=f"{y_label} = {y_data[index]:04.02}",  #
-            )
-            ax_didv.plot(
-                x_data, z_data[index, :], label=f"{n_label} = {n_data[index]:04.02}"
-            )
-            ax_y.plot(n_lim, [y_data[index], y_data[index]], lw=2)
-
-        ax_i.set_xlim(self.plot["x_lim"])
-        ax_i.set_ylim(self.plot["i_lim"])
-        ax_didv.set_xlim(self.plot["x_lim"])
-        ax_didv.set_ylim(self.plot["z_lim"])
-        ax_y.set_ylim(self.plot["y_lim"])
-
-        ax_i.sharex(ax_didv)
-        plt.setp(ax_i.get_xticklabels(), visible=False)
