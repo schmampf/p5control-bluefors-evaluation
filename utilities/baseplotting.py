@@ -61,7 +61,7 @@ class BasePlotting(BaseEvaluation):
             "save_pdf": False,
             "color_map": cmap(color="seeblau", bad="gray"),
             "contrast": None,
-            "vector_color": None,
+            "vector_color": "grey",
             "vector_style": ".",
             "vector_lwms": 1.5,
             "x_lim": [None, None],
@@ -73,13 +73,33 @@ class BasePlotting(BaseEvaluation):
             "y_key": "y_axis",
             "z_key": "dIdV_up",
             "n_key": "T_up_K",
-            "i_key": "I_up_A",
+            "i_key": "I_up_nA",
         }
 
         self.show_map = {}
         self.show_map_vector = {}
         self.show_iv = {}
         logger.info("(%s) ... BasePlotting initialized.", self._name)
+
+    def showAllMaps(self):
+        """Plot and Saves all"""
+        self.inverted = False
+        self.showMap()
+        self.saveMap()
+        self.inverted = True
+        self.showMap()
+        self.saveMap()
+        self.inverted = False
+        self.showMapVector()
+        self.saveMapVector()
+        self.inverted = True
+        self.showMapVector()
+        self.saveMapVector()
+
+    def reshowAll(self):
+        self.reshowMap()
+        self.reshowMapVector()
+        self.reshowIV()
 
     def saveFigure(
         self,
@@ -267,7 +287,7 @@ class BasePlotting(BaseEvaluation):
             plt.suptitle(self.show_map["title"])
             plt.show()
 
-    def saveMap(self):
+    def saveMap(self, string=None):
         """saveMap()
         - safes Figure to self.figure_folder/self.title
         """
@@ -277,9 +297,10 @@ class BasePlotting(BaseEvaluation):
             self.base["figure_folder"],
             self.base["title"],
         )
-        string = "Map"
-        if self.show_map["inverted"]:
-            string += "Inverted"
+        if string is None:
+            string = "Map"
+            if self.show_map["inverted"]:
+                string += "Inverted"
         self.saveFigure(figure=self.show_map["fig"], subtitle=string)
 
     def showMapVector(
@@ -446,7 +467,7 @@ class BasePlotting(BaseEvaluation):
             plt.suptitle(self.show_map_vector["title"])
             plt.show()
 
-    def saveMapVector(self):
+    def saveMapVector(self, string=None):
         """saveMap()
         - safes Figure to self.figure_folder/self.title
         """
@@ -456,9 +477,10 @@ class BasePlotting(BaseEvaluation):
             self.base["figure_folder"],
             self.base["title"],
         )
-        string = "MapVector"
-        if self.show_map_vector["inverted"]:
-            string += "Inverted"
+        if string is None:
+            string = "MapVector"
+            if self.show_map_vector["inverted"]:
+                string += "Inverted"
         self.saveFigure(figure=self.show_map_vector["fig"], subtitle=string)
 
     def showIV(
@@ -599,7 +621,7 @@ class BasePlotting(BaseEvaluation):
         plt.suptitle(self.show_iv["title"])
         plt.show()
 
-    def saveIV(self):
+    def saveIV(self, string=None):
         """saveIV()
         - safes Figure to self.figure_folder/self.title
         """
@@ -609,7 +631,8 @@ class BasePlotting(BaseEvaluation):
             self.base["figure_folder"],
             self.base["title"],
         )
-        string = f"IV {self.show_iv['indices']}"
+        if string is None:
+            string = f"IV {self.show_iv['indices']}"
         self.saveFigure(figure=self.show_iv["fig"], subtitle=string)
 
     @property
