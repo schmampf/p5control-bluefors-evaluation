@@ -238,6 +238,7 @@ class BaseEvaluation(BaseClass):
         time = femto_data["time"]
         amplification_a = femto_data["amp_A"]
         amplification_b = femto_data["amp_B"]
+        plt.close("all")
         plt.figure(1000, figsize=(6, 1.5))
         plt.semilogy(time, amplification_a, "-", label="voltage amplification 1")
         plt.semilogy(time, amplification_b, "--", label="voltage amplification 2")
