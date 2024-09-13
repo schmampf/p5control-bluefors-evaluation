@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 from PIL import Image
 
+from matplotlib.ticker import MaxNLocator
 from utilities.corporate_design_colors_v4 import cmap
 
 logger = logging.getLogger(__name__)
@@ -421,7 +422,7 @@ def plot_iv(
     i_label: str = r"$i$-label",
     fig_nr: int = 2,
     display_dpi: int = 100,
-    vector_color=None,
+    vector_color="grey",
     vector_style="-",
     vector_lwms=1,
 ):
@@ -443,6 +444,9 @@ def plot_iv(
     ax_i = axs[0, 0]
     ax_didv = axs[1, 0]
     gs = axs[0, 1].get_gridspec()
+
+    axs[0, 1].plot(n, y)
+    n_lim = axs[0, 1].get_xlim()
     axs[0, 1].remove()
     axs[1, 1].remove()
     ax_y = fig.add_subplot(gs[0:, -1])
@@ -459,6 +463,7 @@ def plot_iv(
     ax_y.yaxis.set_label_position("right")
     ax_y.yaxis.tick_right()
     ax_y.invert_xaxis()
+    ax_y.xaxis.set_major_locator(MaxNLocator(2))
 
     ax_didv.set_xlabel(x_label)
     ax_didv.set_ylabel(z_label)
@@ -470,8 +475,6 @@ def plot_iv(
     ax_didv.grid()
     ax_y.grid()
 
-    ax_y.plot(n, y, vector_style, color=vector_color, lw=vector_lwms, ms=vector_lwms)
-    n_lim = ax_y.set_xlim(n_lim)
     for index in indices:
         ax_i.plot(
             x,
@@ -480,12 +483,14 @@ def plot_iv(
         )
         ax_didv.plot(x, z[index, :], label=f"{n_label} = {n[index]:04.02}")
         ax_y.plot(n_lim, [y[index], y[index]], lw=2)
+    ax_y.plot(n, y, vector_style, color=vector_color, lw=vector_lwms, ms=vector_lwms)
 
-    ax_i.set_xlim(x_lim)
-    ax_i.set_ylim(i_lim)
-    ax_didv.set_xlim(x_lim)
-    ax_didv.set_ylim(z_lim)
-    ax_y.set_ylim(y_lim)
+    _ = ax_i.set_xlim(x_lim)
+    _ = ax_i.set_ylim(i_lim)
+    _ = ax_didv.set_xlim(x_lim)
+    _ = ax_didv.set_ylim(z_lim)
+    _ = ax_y.set_xlim((float(n_lim[1]), float(n_lim[0])))
+    _ = ax_y.set_ylim(None)
 
     ax_i.sharex(ax_didv)
     plt.setp(ax_i.get_xticklabels(), visible=False)
