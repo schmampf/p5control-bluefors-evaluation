@@ -232,7 +232,11 @@ class BaseEvaluation(BaseClass):
         """
         logger.info("(%s) showAmplifications()", self._name)
 
-        file_name = f"{self.base['file_directory']}{self.base['file_folder']}{self.base['file_name']}"
+        file_name = (
+            self.base["file_directory"]
+            + self.base["file_folder"]
+            + self.base["file_name"]
+        )
         data_file = File(file_name, "r")
         femto_data = np.array(data_file.get("status/femto"))
         time = femto_data["time"]
@@ -272,7 +276,11 @@ class BaseEvaluation(BaseClass):
         """
         logger.info("(%s) showMeasurements()", self._name)
 
-        file_name = f"{self.base['file_directory']}{self.base['file_folder']}{self.base['file_name']}"
+        file_name = (
+            self.base["file_directory"]
+            + self.base["file_folder"]
+            + self.base["file_name"]
+        )
         data_file = File(file_name, "r")
         liste = list(data_file["measurement"].keys())  # type: ignore
         logger.info("(%s) %s", self._name, liste)
@@ -289,7 +297,11 @@ class BaseEvaluation(BaseClass):
         logger.info("(%s) setMeasurement('%s')", self._name, measurement_key)
         try:
 
-            file_name = f"{self.base['file_directory']}{self.base['file_folder']}{self.base['file_name']}"
+            file_name = (
+                self.base["file_directory"]
+                + self.base["file_folder"]
+                + self.base["file_name"]
+            )
             data_file = File(file_name, "r")
             measurement_data = data_file.get(f"measurement/{measurement_key}")
             self.general["specific_keys"] = list(measurement_data)  # type: ignore
@@ -446,7 +458,11 @@ class BaseEvaluation(BaseClass):
 
         # Access File
         try:
-            file_name = f"{self.base['file_directory']}{self.base['file_folder']}{self.base['file_name']}"
+            file_name = (
+                self.base["file_directory"]
+                + self.base["file_folder"]
+                + self.base["file_name"]
+            )
             data_file = File(file_name, "r")
         except AttributeError:
             logger.error("(%s) File can not be found!", self._name)
