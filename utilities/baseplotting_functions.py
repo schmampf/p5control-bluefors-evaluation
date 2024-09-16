@@ -100,6 +100,10 @@ PLOT_KEYS = {
         "self.mapped['temperature_all_up']/self.mapped['temperature_mean_up'].reshape(-1,1)",
         r"$T_\mathrm{Sample}(V_\mathrm{Bias}, V_\mathrm{AC})/T_\mathrm{Sample}(V_\mathrm{AC})$",
     ],
+    "T_all_norm_down": [
+        "self.mapped['temperature_all_down']/self.mapped['temperature_mean_down'].reshape(-1,1)",
+        r"$T_\mathrm{Sample}(V_\mathrm{Bias}, V_\mathrm{AC})/T_\mathrm{Sample}(V_\mathrm{AC})$",
+    ],
 }
 
 
@@ -202,9 +206,9 @@ def plot_map(
             float(np.nanmean(z) + np.nanstd(z) / contrast),
         ]
 
-    plt.close(fig_nr)
+    plt.close(fig_nr + int(inverted))
     fig, (ax_z, ax_c) = plt.subplots(
-        num=fig_nr,
+        num=fig_nr + int(inverted),
         ncols=2,
         figsize=(6, 4),
         dpi=display_dpi,
@@ -288,9 +292,8 @@ def plot_map_vector(
             float(np.nanmean(z) + np.nanstd(z) / contrast),
         ]
 
-    plt.close(fig_nr)
-
     if not inverted:
+        plt.close(fig_nr)
         fig, (ax_n, ax_z, ax_c) = plt.subplots(
             num=fig_nr,
             ncols=3,
@@ -336,15 +339,16 @@ def plot_map_vector(
         _ = ax_z.set_ylim(y_lim)
 
         y_lim = ax_z.get_ylim()
-        _ = ax_n.set_xlim(n_lim)
+        _ = ax_n.set_xlim([n_lim[1], n_lim[0]])
         _ = ax_n.set_ylim(y_lim)
 
         ax_z.sharey(ax_n)
         plt.setp(ax_z.get_yticklabels(), visible=False)
 
     else:
+        plt.close(fig_nr + 1)
         fig, axs = plt.subplots(
-            num=fig_nr,
+            num=fig_nr + 1,
             ncols=2,
             nrows=2,
             figsize=(6, 4),
