@@ -531,9 +531,17 @@ class BaseEvaluation(BaseClass):
                 self.mapped["time_up_start"][i] = time_up[0]
                 self.mapped["time_up_stop"][i] = time_up[-1]
                 # Bin that stuff
-                i_up, _ = bin_y_over_x(v_raw_up, i_raw_up, self.mapped["voltage_axis"])
+                i_up, _ = bin_y_over_x(
+                    v_raw_up,
+                    i_raw_up,
+                    self.mapped["voltage_axis"],
+                    upsampling=self.upsampling,
+                )
                 time_up, _ = bin_y_over_x(
-                    v_raw_up, time_up, self.mapped["voltage_axis"]
+                    v_raw_up,
+                    time_up,
+                    self.mapped["voltage_axis"],
+                    upsampling=self.upsampling,
                 )
                 # Save to Array
                 self.mapped["current_up"][i, :] = i_up
@@ -549,10 +557,16 @@ class BaseEvaluation(BaseClass):
                 self.mapped["time_down_stop"][i] = time_down[-1]
                 # Bin that stuff
                 i_down, _ = bin_y_over_x(
-                    v_raw_down, i_raw_down, self.mapped["voltage_axis"]
+                    v_raw_down,
+                    i_raw_down,
+                    self.mapped["voltage_axis"],
+                    upsampling=self.upsampling,
                 )
                 time_down, _ = bin_y_over_x(
-                    v_raw_down, time_down, self.mapped["voltage_axis"]
+                    v_raw_down,
+                    time_down,
+                    self.mapped["voltage_axis"],
+                    upsampling=self.upsampling,
                 )
                 # Save to Array
                 self.mapped["current_down"][i, :] = i_down
@@ -782,3 +796,106 @@ class BaseEvaluation(BaseClass):
             self.mapped["y_axis"],
             self.mapped_over_temperature["temperature_axis"],
         )
+
+    @property
+    def voltage_amplification_1(self):
+        """get voltage_amplification_1"""
+        return self.general["voltage_amplification_1"]
+
+    @voltage_amplification_1.setter
+    def voltage_amplification_1(self, voltage_amplification_1: int):
+        """set voltage_amplification_1"""
+        self.general["voltage_amplification_1"] = voltage_amplification_1
+        logger.info(
+            "(%s) voltage_amplification_1 = %s", self._name, voltage_amplification_1
+        )
+
+    @property
+    def voltage_amplification_2(self):
+        """get voltage_amplification_2"""
+        return self.general["voltage_amplification_2"]
+
+    @voltage_amplification_2.setter
+    def voltage_amplification_2(self, voltage_amplification_2: int):
+        """set voltage_amplification_2"""
+        self.general["voltage_amplification_2"] = voltage_amplification_2
+        logger.info(
+            "(%s) voltage_amplification_2 = %s", self._name, voltage_amplification_2
+        )
+
+    @property
+    def reference_resistor(self):
+        """get reference_resistor"""
+        return self.general["reference_resistor"]
+
+    @reference_resistor.setter
+    def reference_resistor(self, reference_resistor: float):
+        """set reference_resistor"""
+        self.general["reference_resistor"] = reference_resistor
+        logger.info("(%s) reference_resistor = %s", self._name, reference_resistor)
+
+    @property
+    def index_trigger_up(self):
+        """get index_trigger_up"""
+        return self.general["index_trigger_up"]
+
+    @index_trigger_up.setter
+    def index_trigger_up(self, index_trigger_up: int):
+        """set index_trigger_up"""
+        self.general["index_trigger_up"] = index_trigger_up
+        logger.info("(%s) index_trigger_up = %s", self._name, index_trigger_up)
+
+    @property
+    def index_trigger_down(self):
+        """get index_trigger_down"""
+        return self.general["index_trigger_down"]
+
+    @index_trigger_down.setter
+    def index_trigger_down(self, index_trigger_down: int):
+        """set index_trigger_down"""
+        self.general["index_trigger_down"] = index_trigger_down
+        logger.info("(%s) index_trigger_down = %s", self._name, index_trigger_down)
+
+    @property
+    def measurement_key(self):
+        """get measurement_key"""
+        return self.general["measurement_key"]
+
+    @measurement_key.setter
+    def measurement_key(self, measurement_key: str):
+        """set measurement_key"""
+        self.general["measurement_key"] = measurement_key
+        logger.info("(%s) measurement_key = %s", self._name, measurement_key)
+
+    @property
+    def specific_keys(self):
+        """get specific_keys"""
+        return self.general["specific_keys"]
+
+    @specific_keys.setter
+    def specific_keys(self, specific_keys: list[str]):
+        """set specific_keys"""
+        self.general["specific_keys"] = specific_keys
+        logger.info("(%s) specific_keys = %s", self._name, specific_keys)
+
+    @property
+    def y_unsorted(self):
+        """get y_unsorted"""
+        return self.general["y_unsorted"]
+
+    @y_unsorted.setter
+    def y_unsorted(self, y_unsorted: np.ndarray):
+        """set y_unsorted"""
+        self.general["y_unsorted"] = y_unsorted
+        logger.info("(%s) y_unsorted = %s", self._name, y_unsorted)
+
+    @property
+    def upsampling(self):
+        """get upsampling"""
+        return self.general["upsampling"]
+
+    @upsampling.setter
+    def upsampling(self, upsampling):
+        """set upsampling"""
+        self.general["upsampling"] = upsampling
+        logger.info("(%s) upsampling = %s", self._name, upsampling)
