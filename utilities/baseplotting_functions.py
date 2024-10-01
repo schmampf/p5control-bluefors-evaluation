@@ -43,6 +43,10 @@ PLOT_KEYS = {
         r"$V_\mathrm{Bias}^\leftarrow$ (V)",
     ],
     "dIdV_up": ["self.mapped['differential_conductance_up']", r"d$I/$d$V$ ($G_0$)"],
+    "dIdV_up_asym": [
+        "self.mapped['differential_conductance_up']-np.flip(self.mapped['differential_conductance_up'], axis=1)",
+        r"$($d$I/$d$V)^\rightarrow-($d$I/$d$V)^\leftarrow$ ($G_0$)",
+    ],
     "dIdV_up_T": [
         "self.mapped_over_temperature['differential_conductance_up']",
         r"d$I/$d$V$ ($G_0$)",
@@ -468,6 +472,7 @@ def plot_iv(
     ax_y.yaxis.tick_right()
     ax_y.invert_xaxis()
     ax_y.xaxis.set_major_locator(MaxNLocator(2))
+    ax_y.set_yticks(y[indices])
 
     ax_didv.set_xlabel(x_label)
     ax_didv.set_ylabel(z_label)
