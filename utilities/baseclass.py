@@ -58,14 +58,13 @@ class BaseClass:
         self._base_name = name
 
         # Determine file directory based on OS
-        match platform.system():
-            case "Darwin":
-                file_directory = "/Volumes/speedyboy/measurement data/"
-            case "Linux":
-                file_directory = "/home/oliver/Documents/measurement_data/"
-            case _:
-                file_directory = ""
-                logger.warning("(%s) needs a valid file directory.", self._base_name)
+        if platform.system() == "Darwin":
+            file_directory = "/Volumes/speedyboy/measurement data/"
+        elif platform.system() == "Linux":
+            file_directory = "/home/oliver/Documents/measurement_data/"
+        else:
+            file_directory = ""
+            logger.warning("(%s) needs a valid file directory.", self._base_name)
 
         # Define base configuration for file management
         self.base = {
