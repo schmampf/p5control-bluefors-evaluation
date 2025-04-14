@@ -36,22 +36,18 @@ import platform
 # from typing import Dict, Any
 from dataclasses import dataclass, field
 from typing import Dict, Any, List
-from abc import ABC, abstractmethod
+# from abc import ABC, abstractmethod
 
 # 3rd party
 import pickle
-import logging
+# import logging
 # from importlib import reload
 from qtpy.QtWidgets import QApplication
 from qtpy.QtGui import QIcon
 
 # local
 from utilities.hdf5view.mainwindow import MainWindow
-# endregion
-
-# region Configure logging
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-logger = logging.getLogger(__name__)
+from utilities.logger import logger
 # endregion
 
 @dataclass
@@ -71,14 +67,13 @@ class DataCollection:
     packets: Dict[str, Any]             = field(default_factory=lambda: {"data": FileData()})
     fields_ignore_on_save: List[str]    = field(default_factory=lambda: ["name", "plot_name"])
    
-class FileAPI(ABC):
+class FileAPI:
     """
     FileAPI provides methods to save and load data files.
     It also integrates HDF5 file visualization through a Qt-based GUI.
     """
     
     @staticmethod
-    @abstractmethod
     def saveData(collection: DataCollection, title: str = ""):
         """
         Save the object's attributes to a file.
@@ -106,7 +101,6 @@ class FileAPI(ABC):
             pickle.dump(to_store, file)
     
     @staticmethod
-    @abstractmethod
     def loadData(collection: DataCollection, title: str = ""):
         """
         Load attributes from a previously saved file.
@@ -134,7 +128,6 @@ class FileAPI(ABC):
         print(collection.packets["data"].__dict__)
     
     @staticmethod
-    @abstractmethod
     def showData(collection: DataCollection):
         """Display stored attributes excluding those marked for ignoring."""
         
@@ -165,76 +158,76 @@ class FileAPI(ABC):
         window.open_file(file_name)
         app.exec()
 
-class Files(FileData, FileAPI):
-    data: FileData
+# class Files(FileData, FileAPI):
+#     data: FileData
     
-    def __setattr__(self, name, value):
-        if not name == "data":  
-            logger.debug("(%s) (%s) = %s", self.data.name, name, value)
-            self.data.__setattr__(name, value)
-        else:
-            super().__setattr__(name, value)
+#     def __setattr__(self, name, value):
+#         if not name == "data":  
+#             logger.debug("(%s) (%s) = %s", self.data.name, name, value)
+#             self.data.__setattr__(name, value)
+#         else:
+#             super().__setattr__(name, value)
     
-    def __getattr__(self, name):
-        if not name == "data":
-            logger.debug("(%s) (%s)", self.data.name, name)
-            return self.data.__getattribute__(name)
-        else:
-            return super().__getattribute__(name)
+#     def __getattr__(self, name):
+#         if not name == "data":
+#             logger.debug("(%s) (%s)", self.data.name, name)
+#             return self.data.__getattribute__(name)
+#         else:
+#             return super().__getattribute__(name)
     
-    def __init__(self, name="base", root_dir=None):
-        self.data = FileData(name=name)
+#     def __init__(self, name="base", root_dir=None):
+#         self.data = FileData(name=name)
         
-        if not root_dir:
-            logger.warning("(%s) The project root directory not set. Assuming defaults.", self.data.name)
+#         if not root_dir:
+#             logger.warning("(%s) The project root directory not set. Assuming defaults.", self.data.name)
             
-            username = os.getlogin()
+#             username = os.getlogin()
             
-            match (platform.system()):
-                case "Darwin":
-                    file_directory = f"/Volumes/{username}/measurement data/"
-                case "Linux":
-                    file_directory = f"/home/{username}/Documents/measurement_data/"
-        else:
-            if not root_dir.endswith("/"):
-                root_dir += "/"
+#             match (platform.system()):
+#                 case "Darwin":
+#                     file_directory = f"/Volumes/{username}/measurement data/"
+#                 case "Linux":
+#                     file_directory = f"/home/{username}/Documents/measurement_data/"
+#         else:
+#             if not root_dir.endswith("/"):
+#                 root_dir += "/"
             
-            file_directory = root_dir
-            logger.info("(%s) The project root directory set to %s.", self.data.name, file_directory)
+#             file_directory = root_dir
+#             logger.info("(%s) The project root directory set to %s.", self.data.name, file_directory)
         
-        self.data.file_directory = file_directory
-        logger.info("(%s) ... Files initialized.", self.data.name)     
+#         self.data.file_directory = file_directory
+#         logger.info("(%s) ... Files initialized.", self.data.name)     
 
-    def saveData(self, title: str = ""):
-        """Save the object's attributes to a file."""
-        collection = DataCollection()
-        collection.packets["data"] = self.data
-        super().saveData(collection, title)
+#     def saveData(self, title: str = ""):
+#         """Save the object's attributes to a file."""
+#         collection = DataCollection()
+#         collection.packets["data"] = self.data
+#         super().saveData(collection, title)
         
-    def loadData(self, title: str = ""):
-        """Load attributes from a previously saved file."""
-        collection = DataCollection()
-        collection.packets["data"] = self.data  # set packet state to current (keep ignored value state)
-        super().loadData(collection, title)
-        self.data = collection.packets["data"]  # update the data object with loaded attributes
+#     def loadData(self, title: str = ""):
+#         """Load attributes from a previously saved file."""
+#         collection = DataCollection()
+#         collection.packets["data"] = self.data  # set packet state to current (keep ignored value state)
+#         super().loadData(collection, title)
+#         self.data = collection.packets["data"]  # update the data object with loaded attributes
         
-    def showData(self):
-        """Display stored attributes excluding those marked for ignoring."""
-        collection = DataCollection()
-        collection.packets["data"] = self.data
-        return super().showData(collection)
+#     def showData(self):
+#         """Display stored attributes excluding those marked for ignoring."""
+#         collection = DataCollection()
+#         collection.packets["data"] = self.data
+#         return super().showData(collection)
     
-    def showFile(self):
-        """Display the HDF5 file using the GUI."""
-        super().showFile(self.data)
+#     def showFile(self):
+#         """Display the HDF5 file using the GUI."""
+#         super().showFile(self.data)
         
-def test():
-    """Test the Files class."""
-    obj = Files(name="MyBase")
-    obj.saveData("test_data.pickle")
-    obj.loadData("test_data.pickle")
-    print(obj.showData())
+# def test():
+#     """Test the Files class."""
+#     obj = Files(name="MyBase")
+#     obj.saveData("test_data.pickle")
+#     obj.loadData("test_data.pickle")
+#     print(obj.showData())
     
-    obj.title = "MyTitle"
-    print(obj.title)
-# test()
+#     obj.title = "MyTitle"
+#     print(obj.title)
+# # test()

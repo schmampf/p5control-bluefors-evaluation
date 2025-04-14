@@ -44,53 +44,83 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 # 3rd party
-import logging
 import numpy as np
-# import matplotlib.pyplot as plt
-# from h5py import File
+import matplotlib.pyplot as plt
+import h5py
 
 # local
-from integration.files import Files, FileAPI
+from integration.files import DataCollection
+from utilities.logger import logger
 #endregion
 
-logger = logging.getLogger(__name__)
+@dataclass 
+class MeasurementHeader:
+    type: str = field(default_factory=str)
 
 @dataclass
 class Parameters:
     volt_amp: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0], dtype=float))
     ref_resistor: float = field(default_factory=lambda: 51.689E3)
+    selected_measurement: MeasurementHeader = field(default_factory=lambda: MeasurementHeader())
 
-@dataclass 
-class MeasurementHeader:
-    type: str = field(default_factory=str)
+
   
 # class Measurements(Enum):
     
     
 
-class Evaluation(FileAPI):
-    files: Files
-    params: Parameters
-    headers: MeasurementHeader
+class EvaluationAPI:
+    """
+    EvaluationAPI provides methods to evaluate measurement data.
+    It serves as a base class for specific evaluation routines.
+    """
     
-    # def __setattr__(self, name, value):
-    #     if not name in ["files", "params", "headers"]:
-    #         for group in ["files", "params", "headers"]:
-    #             if name in getattr(self, group).__dict__:
-    #                 group.__dict__[name] = value
-    #                 break
-    #     else:
-    #         super().__setattr__(name, value)
-            
-    # def __getattr__(self, name):
+    @staticmethod
+    def select_measurement(collection: DataCollection, header: MeasurementHeader):
+        """
+        Select a specific measurement for evaluation.
+        """
+        logger.debug("(%s) select_measurement()", collection.packets["data"].name)
+    
+    @staticmethod
+    def showAmplification(collection: DataCollection):
+        """
+        Plots the voltage amplification over time for the entire measurement.
+        """
+        data = collection.packets["data"]
+        logger.debug("(%s) showAmplifications()", data.name)
+        file_name = f"{data.file_directory}{data.file_folder}{data.file_name}"
+
+        with h5py.File(file_name, "r") as data_file:
+
+            if data_file.__contains__("status/femto"):
+                femto_key = "femto"
+            elif data_file.__contains__("status/femtos"):
+                femto_key = "femtos"
+            else:
+                logger.error("(%s) ...femto(s) status not found.", data.name)
+                return
+
+            femto_data = np.array(data_file[f"status/{femto_key}"])
+
+        plt.close(1000)
+        plt.figure(1000, figsize=(6, 1.5))
+        plt.semilogy(
+            femto_data["time"],
+            femto_data["amp_A"],
+            "-",
+            label="Voltage Amplification 1",
+        )
+        plt.semilogy(
+            femto_data["time"],
+            femto_data["amp_B"],
+            "--",
+            label="Voltage Amplification 2",
+        )
+        plt.legend()
+        plt.title("Femto Amplifications (Status)")
+        plt.xlabel("Time (s)")
+        plt.ylabel("Amplification")
+        plt.tight_layout()
+        plt.show()
         
-				
-   
-   
-    def __init__(self, name: str = "Evaluation"):
-        """
-        Initialize the Evaluation class.
-        Args:
-        name (str): Name of the evaluation instance.
-        """
-        self.files = Files(name=name+"_fileData")

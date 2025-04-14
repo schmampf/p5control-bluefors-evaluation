@@ -1,9 +1,6 @@
-from integration.files import Files
+import pkg_resources
+import subprocess
 
-obj = Files(name="MyBase")
-
-# print(obj.showData())
-
-obj.saveData("test_data.pickle")
-obj.loadData("test_data.pickle")
-print(obj.showData())
+for dist in pkg_resources.working_set:
+    print(f"Upgrading {dist.project_name}...")
+    subprocess.run(["pip", "install", "--upgrade", dist.project_name])
