@@ -23,11 +23,13 @@ Methods:
     - getSingleIV(y_key, specific_trigger): Retrieves a single IV sweep with binning and temperature handling.
     - getMaps(y_bounds): Processes and maps IV sweeps over a voltage axis.
     - Property methods: Getters and setters for IV evaluation parameters such as voltage/current limits,
-      binning settings, and upsampling options.
+      binning settings, and upsample options.
 
 Author: Oliver Irtenkauf
 Date: 2025-04-01
 """
+
+# region imports
 
 import sys
 import logging
@@ -42,13 +44,19 @@ from h5py import File
 from utilities.baseevaluation import BaseEvaluation
 from utilities.basefunctions import linear_fit
 from utilities.basefunctions import bin_y_over_x
+from utilities.basefunctions import bin_z_over_y
+from utilities.basefunctions import get_amplitude
 
 logger = logging.getLogger(__name__)
 importlib.reload(sys.modules["utilities.baseevaluation"])
 importlib.reload(sys.modules["utilities.basefunctions"])
 
+# endregion
+
 
 class IVEvaluation(BaseEvaluation):
+
+    # region __init__, empf_dict, setIVAT
     """
     Initializes an instance of the IVEvaluation class.
 
@@ -65,8 +73,8 @@ class IVEvaluation(BaseEvaluation):
         """
         Description
         """
-        super().__init__()
         self._iv_eva_name: str = name
+        super().__init__()
 
         self.mapped = {
             "y_axis": np.array([]),
@@ -80,18 +88,33 @@ class IVEvaluation(BaseEvaluation):
             "current_maximum": np.nan,
             "current_bins": np.nan,
             "current_axis": np.array([]),
-            "upsampling_current": 0,
-            "upsampling_voltage": 0,
+            "amplitude_minimum": np.nan,
+            "amplitude_maximum": np.nan,
+            "amplitude_bins": np.nan,
+            "amplitude_axis": np.array([]),
+            "temperature_minimum": np.nan,
+            "temperature_maximum": np.nan,
+            "temperature_bins": np.nan,
+            "temperature_axis": np.array([]),
+            "upsample_current": 0,
+            "upsample_voltage": 0,
+            "upsample_amplitude": 0,
+            "upsample_temperature": 0,
             "eva_current": True,
             "eva_voltage": True,
             "eva_temperature": True,
         }
+
+        self.index_trigger: int = 1
+        self.evaluated = self.get_empty_dictionary()
 
         self.up_sweep = self.get_empty_dictionary()
         self.down_sweep = self.get_empty_dictionary()
 
         self.setV(2.0e-3, voltage_bins=100)
         self.setI(1.0e-6, current_bins=100)
+        self.setA(0, 1, 500)
+        self.setT(0, 2, 500)
 
         logger.info("(%s) ... IVEvaluation initialized.", self._iv_eva_name)
 
@@ -227,6 +250,91 @@ class IVEvaluation(BaseEvaluation):
             self.current_bins,
         )
 
+    def setA(
+        self,
+        amplitude_minimum: float = np.nan,
+        amplitude_maximum: float = np.nan,
+        amplitude_bins: int = 0,
+    ):
+        """
+        Sets the amplitude-axis.
+
+        Parameters
+        ----------
+        amplitude_minimum : float, optional
+            Minimum amplitude value.
+        amplitude_maximum : float, optional
+            Maximum amplitude value.
+        amplitude_bins : float, optional
+            Number of bins minus 1.
+        """
+
+        if not np.isnan(amplitude_minimum):
+            self.amplitude_minimum = amplitude_minimum
+        if not np.isnan(amplitude_maximum):
+            self.amplitude_maximum = amplitude_maximum
+        if amplitude_bins:
+            self.amplitude_bins = amplitude_bins
+
+        # Calculate new amplitude axis.
+        self.amplitude_axis = np.linspace(
+            self.amplitude_minimum,
+            self.amplitude_maximum,
+            self.amplitude_bins + 1,
+        )
+
+        logger.debug(
+            "(%s) setA(%s, %s, %s)",
+            self._iv_eva_name,
+            self.amplitude_minimum,
+            self.amplitude_maximum,
+            self.amplitude_bins,
+        )
+
+    def setT(
+        self,
+        temperature_minimum: float = np.nan,
+        temperature_maximum: float = np.nan,
+        temperature_bins: int = 0,
+    ):
+        """
+        Sets the temperature-axis.
+
+        Parameters
+        ----------
+        temperature_minimum : float, optional
+            Minimum temperature value.
+        temperature_maximum : float, optional
+            Maximum temperature value.
+        temperature_bins : float, optional
+            Number of bins minus 1.
+        """
+
+        if not np.isnan(temperature_minimum):
+            self.temperature_minimum = temperature_minimum
+        if not np.isnan(temperature_maximum):
+            self.temperature_maximum = temperature_maximum
+        if temperature_bins:
+            self.temperature_bins = temperature_bins
+
+        # Calculate new temperature axis.
+        self.temperature_axis = np.linspace(
+            self.temperature_minimum,
+            self.temperature_maximum,
+            self.temperature_bins + 1,
+        )
+
+        logger.debug(
+            "(%s) setT(%s, %s, %s)",
+            self._iv_eva_name,
+            self.temperature_minimum,
+            self.temperature_maximum,
+            self.temperature_bins,
+        )
+
+    # endregion
+
+    # region internal functions
     def get_current_voltage(self, specific_key: str):
         """
         Retrieves and processes current and voltage data from an HDF5 file.
@@ -416,7 +524,7 @@ class IVEvaluation(BaseEvaluation):
         dictionary["time_stop"][index] = time_filtered[-1]
 
         # Store raw IV data tuples
-        dictionary["iv_tuples"][index] = [i_raw_filtered, v_raw_filtered]
+        dictionary["iv_tuples"][index] = [i_raw_filtered, v_raw_filtered, time_filtered]
 
         # Bin current data if enabled
         if self.eva_current:
@@ -424,13 +532,13 @@ class IVEvaluation(BaseEvaluation):
                 v_raw_filtered,
                 i_raw_filtered,
                 self.voltage_axis,
-                upsampling=self.upsampling_current,
+                upsample=self.upsample_current,
             )
             dictionary["time_current"][index, :], _ = bin_y_over_x(
                 v_raw_filtered,
                 time_filtered,
                 self.voltage_axis,
-                upsampling=self.upsampling_current,
+                upsample=self.upsample_current,
             )
 
         # Bin voltage data if enabled
@@ -439,13 +547,13 @@ class IVEvaluation(BaseEvaluation):
                 i_raw_filtered,
                 v_raw_filtered,
                 self.current_axis,
-                upsampling=self.upsampling_voltage,
+                upsample=self.upsample_voltage,
             )
             dictionary["time_voltage"][index, :], _ = bin_y_over_x(
                 i_raw_filtered,
                 time_filtered,
                 self.current_axis,
-                upsampling=self.upsampling_voltage,
+                upsample=self.upsample_voltage,
             )
 
     def get_temperature_binning_done(
@@ -493,7 +601,8 @@ class IVEvaluation(BaseEvaluation):
                 temporary_time[indices],
                 temporary_temperature[indices],
                 temporary_time_current,
-                upsampling=1000,
+                upsample=1000,
+                upsample_method="nearest",
             )
 
         if self.eva_voltage:
@@ -517,7 +626,7 @@ class IVEvaluation(BaseEvaluation):
                 temporary_time[indices],
                 temporary_temperature[indices],
                 temporary_time_voltage,
-                upsampling=1000,
+                upsample=1000,
             )
 
     def sort_mapped_over_y(self, y_bounds: list[int]):
@@ -677,6 +786,9 @@ class IVEvaluation(BaseEvaluation):
                 dictionary["temperature_voltage"], axis=1
             )
 
+    # endregion
+
+    # region main functions
     def getSingleIV(self, y_key: str, specific_trigger: int = 1):
         """
         Retrieves a single IV curve and associated data, including voltage, current,
@@ -747,126 +859,160 @@ class IVEvaluation(BaseEvaluation):
         # Return the dictionary with the binned and calculated data
         return single_iv
 
-    def getMaps(self, y_bounds: list[int] = []):
+    def getMaps(self, trigger_indices: list[int] = [1], y_bounds: list[int] = []):
         """
-        getMaps()
-        - Calculates current (I) and voltage (V), and splits data for up and down sweeps.
-        - Maps I, differential conductance, and temperature over a linear voltage axis.
-        - Saves the start and stop times as well as offsets.
-        - Sorts by the y-axis.
+        Processes IV measurement data and returns mapped quantities over a linear voltage axis.
+
+        This function:
+        - Retrieves raw I(V) data for each measurement key.
+        - Splits sweeps by trigger indices (e.g., for up/down sweep separation).
+        - Computes differential conductance and optional temperature mapping.
+        - Applies voltage offset correction and y-axis sorting/filtering.
+        - Returns all results as dictionaries, one per trigger index.
 
         Parameters
         ----------
+        trigger_indices : list of int, optional
+            Trigger indices to separate multiple sweeps or events. Default is [1].
+
         y_bounds : list of int, optional
-            The bounds for the y-axis to filter the data. If not specified, the entire range is used.
+            Bounds for filtering the data along the y-axis. If empty, the full range is used.
+
+        Returns
+        -------
+        tuple of dict
+            Each dictionary contains mapped results (I, V, dI/dV, temperature, etc.)
+            for one trigger index.
         """
         logger.info("(%s) getMaps()", self._iv_eva_name)
 
-        # Initialize voltage offset values
+        # Allocate voltage offset arrays, one per y-position
         len_y = np.shape(self.y_unsorted)[0]
         self.voltage_offset_1 = np.full(len_y, np.nan, dtype="float64")
         self.voltage_offset_2 = np.full(len_y, np.nan, dtype="float64")
 
-        # Initialize sweep dictionaries for up and down triggers, if specified
-        if self.index_trigger_up is not None:
-            self.up_sweep = self.get_empty_dictionary()
-        if self.index_trigger_down is not None:
-            self.down_sweep = self.get_empty_dictionary()
+        # Precompute sorting indices along the y-axis
+        sort_indices = self.sort_mapped_over_y(y_bounds)
 
-        # Retrieve single IV curves for both up and down sweeps if y_0_key is defined
-        if self.y_0_key != "":
-            if self.index_trigger_up is not None:
-                self.up_sweep["plain"] = self.getSingleIV(
-                    self.y_0_key, self.index_trigger_up
-                )
-            if self.index_trigger_down is not None:
-                self.down_sweep["plain"] = self.getSingleIV(
-                    self.y_0_key, self.index_trigger_down
-                )
-
-        # Check for the availability of temperature data
-        check = self.check_for_temperatures(self.specific_keys[0])
-        if not check:
-            # If no temperature data, fallback to backup temperature data
+        # Determine whether temperature data is available
+        has_temp_data = self.check_for_temperatures(self.specific_keys[0])
+        if not has_temp_data:
+            # Fallback to backup temperature data
             temporary_time, temporary_temperature = self.get_backup_temperatures()
 
-        # Iterate over the keys for each measurement
-        for index, key in enumerate(tqdm(self.specific_keys)):
-            # Get I, V from ADwin data for the current key
-            (
-                v_raw,
-                i_raw,
-                trigger,
-                time,
-                self.voltage_offset_1[index],
-                self.voltage_offset_2[index],
-            ) = self.get_current_voltage(key)
+        evaluated = []
+        for i_trigger_index, trigger_index in enumerate(trigger_indices):
+            # Create an empty results dictionary for this trigger
+            evaluated.append(self.get_empty_dictionary())
 
-            # Process binning for up and down sweeps if applicable
-            if self.index_trigger_up is not None:
+            # If a fixed y-value key is defined, retrieve its IV data
+            if self.y_0_key != "":
+                evaluated[i_trigger_index]["plain"] = self.getSingleIV(
+                    self.y_0_key,
+                    trigger_index,
+                )
+
+            # Iterate over the keys for each measurement
+            for index, key in enumerate(tqdm(self.specific_keys)):
+                # Extract raw voltage, current, trigger, and time data
+                (
+                    v_raw,
+                    i_raw,
+                    trigger,
+                    time,
+                    self.voltage_offset_1[index],
+                    self.voltage_offset_2[index],
+                ) = self.get_current_voltage(key)
+
+                # Bin current and voltage data
                 self.get_iv_binning_done(
                     index,
-                    self.index_trigger_up,
-                    self.up_sweep,
+                    trigger_index,
+                    evaluated[i_trigger_index],
                     v_raw,
                     i_raw,
                     trigger,
                     time,
                 )
 
-            if self.index_trigger_down is not None:
-                self.get_iv_binning_done(
-                    index,
-                    self.index_trigger_down,
-                    self.down_sweep,
-                    v_raw,
-                    i_raw,
-                    trigger,
-                    time,
+                # If temperature evaluation is enabled
+                if self.eva_temperature:
+                    if has_temp_data:
+                        # Get temperature data for this key
+                        temporary_time, temporary_temperature = (
+                            self.get_sweep_temperatures(key)
+                        )
+
+                    # Bin temperature data
+                    self.get_temperature_binning_done(
+                        index,
+                        evaluated[i_trigger_index],
+                        temporary_time,
+                        temporary_temperature,
+                    )
+
+            # Apply sorting to the data based on y-axis order
+            self.sort_dictionary_over_y(
+                sort_indices, y_bounds, evaluated[i_trigger_index]
+            )
+
+            # Calculate differential conductance and resistance
+            self.get_differentials(evaluated[i_trigger_index])
+
+        return tuple(evaluated)
+
+    def getMapsAmplitude(self, already_evaluated: list[dict]):
+        logger.info("(%s) getMapsAmplitude()", self._iv_eva_name)
+        evaluated = []
+        amplitude = get_amplitude(self.mapped["y_axis"])
+        for index_to_evaluate, to_evaluate in enumerate(already_evaluated):
+            evaluated.append(self.get_empty_dictionary())
+            for string in [
+                "current",
+                "time_current",
+                "temperature_current",
+                "voltage",
+                "time_voltage",
+                "temperature_voltage",
+                "differential_conductance",
+                "differential_resistance",
+            ]:
+                (
+                    evaluated[index_to_evaluate][string],
+                    evaluated[index_to_evaluate][f"{string}_counter"],
+                ) = bin_z_over_y(
+                    amplitude,
+                    to_evaluate[string],
+                    self.mapped["amplitude_axis"],
+                )
+            for string in [
+                "temperature",
+                "time_start",
+                "time_stop",
+            ]:
+
+                (
+                    evaluated[index_to_evaluate][string],
+                    evaluated[index_to_evaluate][f"{string}_counter"],
+                ) = bin_y_over_x(
+                    amplitude,
+                    to_evaluate[string],
+                    self.mapped["amplitude_axis"],
                 )
 
-            # If temperature data is enabled, process temperature binning
-            if self.eva_temperature:
-                if check:
-                    # Retrieve sweep temperatures if available
-                    temporary_time, temporary_temperature = self.get_sweep_temperatures(
-                        key
-                    )
+        return tuple(evaluated)
 
-                # Bin temperature data for both up and down sweeps
-                if self.index_trigger_up is not None:
-                    self.get_temperature_binning_done(
-                        index,
-                        self.up_sweep,
-                        temporary_time,
-                        temporary_temperature,
-                    )
+    # TODO
+    def getMapsTemperature(self, already_evaluated: list[dict]):
+        logger.info("(%s) getMapsTemperature()", self._iv_eva_name)
 
-                if self.index_trigger_down is not None:
-                    self.get_temperature_binning_done(
-                        index,
-                        self.down_sweep,
-                        temporary_time,
-                        temporary_temperature,
-                    )
+        # TODO!!!
 
-        # Sort the data by the y-axis using the specified bounds
-        indices = self.sort_mapped_over_y(y_bounds)
+        return tuple(already_evaluated)
 
-        # Apply sorting to the up and down sweep data if applicable
-        if self.index_trigger_up is not None:
-            self.sort_dictionary_over_y(indices, y_bounds, self.up_sweep)
+    # endregion
 
-        if self.index_trigger_down is not None:
-            self.sort_dictionary_over_y(indices, y_bounds, self.down_sweep)
-
-        # Calculate differential conductance and resistance for both sweeps
-        if self.index_trigger_up is not None:
-            self.get_differentials(self.up_sweep)
-        if self.index_trigger_down is not None:
-            self.get_differentials(self.down_sweep)
-
-    ### IV Properties ###
+    # region iv properties
 
     @property
     def eva_current(self):
@@ -1012,21 +1158,123 @@ class IVEvaluation(BaseEvaluation):
         self.mapped["current_axis"] = current_axis
 
     @property
-    def upsampling_current(self):
-        """Get the value of upsampling_current."""
-        return self.mapped["upsampling_current"]
+    def amplitude_minimum(self):
+        """Get the value of amplitude_minimum."""
+        return self.mapped["amplitude_minimum"]
 
-    @upsampling_current.setter
-    def upsampling_current(self, upsampling_current: int):
-        """Set the value of upsampling_current."""
-        self.mapped["upsampling_current"] = upsampling_current
+    @amplitude_minimum.setter
+    def amplitude_minimum(self, amplitude_minimum):
+        """Set the value of amplitude_minimum."""
+        self.mapped["amplitude_minimum"] = amplitude_minimum
 
     @property
-    def upsampling_voltage(self):
-        """Get the value of upsampling_voltage."""
-        return self.mapped["upsampling_voltage"]
+    def amplitude_maximum(self):
+        """Get the value of amplitude_maximum."""
+        return self.mapped["amplitude_maximum"]
 
-    @upsampling_voltage.setter
-    def upsampling_voltage(self, upsampling_voltage: int):
-        """Set the value of upsampling_voltage."""
-        self.mapped["upsampling_voltage"] = upsampling_voltage
+    @amplitude_maximum.setter
+    def amplitude_maximum(self, amplitude_maximum):
+        """Set the value of amplitude_maximum."""
+        self.mapped["amplitude_maximum"] = amplitude_maximum
+
+    @property
+    def amplitude_bins(self):
+        """Get the value of amplitude_bins."""
+        return self.mapped["amplitude_bins"]
+
+    @amplitude_bins.setter
+    def amplitude_bins(self, amplitude_bins):
+        """Set the value of amplitude_bins."""
+        self.mapped["amplitude_bins"] = amplitude_bins
+
+    @property
+    def amplitude_axis(self):
+        """Get the value of amplitude_axis."""
+        return self.mapped["amplitude_axis"]
+
+    @amplitude_axis.setter
+    def amplitude_axis(self, amplitude_axis):
+        """Set the value of amplitude_axis."""
+        self.mapped["amplitude_axis"] = amplitude_axis
+
+    @property
+    def temperature_minimum(self):
+        """Get the value of temperature_minimum."""
+        return self.mapped["temperature_minimum"]
+
+    @temperature_minimum.setter
+    def temperature_minimum(self, temperature_minimum):
+        """Set the value of temperature_minimum."""
+        self.mapped["temperature_minimum"] = temperature_minimum
+
+    @property
+    def temperature_maximum(self):
+        """Get the value of temperature_maximum."""
+        return self.mapped["temperature_maximum"]
+
+    @temperature_maximum.setter
+    def temperature_maximum(self, temperature_maximum):
+        """Set the value of temperature_maximum."""
+        self.mapped["temperature_maximum"] = temperature_maximum
+
+    @property
+    def temperature_bins(self):
+        """Get the value of temperature_bins."""
+        return self.mapped["temperature_bins"]
+
+    @temperature_bins.setter
+    def temperature_bins(self, temperature_bins):
+        """Set the value of temperature_bins."""
+        self.mapped["temperature_bins"] = temperature_bins
+
+    @property
+    def temperature_axis(self):
+        """Get the value of temperature_axis."""
+        return self.mapped["temperature_axis"]
+
+    @temperature_axis.setter
+    def temperature_axis(self, temperature_axis):
+        """Set the value of temperature_axis."""
+        self.mapped["temperature_axis"] = temperature_axis
+
+    @property
+    def upsample_current(self):
+        """Get the value of upsample_current."""
+        return self.mapped["upsample_current"]
+
+    @upsample_current.setter
+    def upsample_current(self, upsample_current: int):
+        """Set the value of upsample_current."""
+        self.mapped["upsample_current"] = upsample_current
+
+    @property
+    def upsample_voltage(self):
+        """Get the value of upsample_voltage."""
+        return self.mapped["upsample_voltage"]
+
+    @upsample_voltage.setter
+    def upsample_voltage(self, upsample_voltage: int):
+        """Set the value of upsample_voltage."""
+        self.mapped["upsample_voltage"] = upsample_voltage
+
+    @property
+    def upsample_amplitude(self):
+        """Get the value of upsample_amplitude."""
+        return self.mapped["upsample_amplitude"]
+
+    @upsample_amplitude.setter
+    def upsample_amplitude(self, upsample_amplitude: int):
+        """Set the value of upsample_amplitude."""
+        self.mapped["upsample_amplitude"] = upsample_amplitude
+
+    @property
+    def upsample_temperature(self):
+        """Get the value of upsample_temperature."""
+        return self.mapped["upsample_temperature"]
+
+    @upsample_temperature.setter
+    def upsample_temperature(self, upsample_temperature: int):
+        """Set the value of upsample_temperature."""
+        self.mapped["upsample_temperature"] = upsample_temperature
+
+    # endregion
