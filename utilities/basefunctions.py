@@ -19,6 +19,7 @@ Functions:
     - get_ext(x, y, x_lim, y_lim): Computes extent boundaries for data
       visualization, considering pixel dimensions and handling None values
       in axis limits.
+    - get_norm(values): return appropriate norm and corresponding unit string.
 
 Dependencies:
     - logging
@@ -57,40 +58,113 @@ def linear_fit(x) -> np.ndarray:
     return fit_x
 
 
-def bin_y_over_x(x: np.ndarray, y: np.ndarray, x_bins: np.ndarray, upsampling: int = 0):
+def bin_y_over_x(
+    x: np.ndarray,
+    y: np.ndarray,
+    x_bins: np.ndarray,
+    upsample: int = 0,
+    upsample_method: str = "linear",
+):
     """
-    Bin y-values over evenly spaced, monotonically increasing x-values.
-    If there are large gaps in the y-data, upsampling can be used to fill them.
+    Bins y-values over given x-intervals (x_bins), optionally upsampling the (x, y) data beforehand.
 
-    Parameters:
-        x (np.ndarray): X-values (may be unevenly spaced).
-        y (np.ndarray): Y-values corresponding to x-values.
-        x_bins (np.ndarray): Bin edges for x-values.
-        upsampling (int, optional): Factor to increase data resolution. Defaults to 0.
+    This function is useful for aggregating y-values over x-axis intervals, such as averaging measurements
+    over fixed voltage or time bins. If the data is sparse or contains gaps, upsampling with interpolation
+    can increase the resolution before binning.
 
-    Returns:
-        tuple: (Binned y-values, count of points in each bin)
+    Parameters
+    ----------
+    x : np.ndarray
+        1D array of x-values (e.g., voltage or time). Does not need to be evenly spaced.
+    y : np.ndarray
+        1D array of y-values corresponding to x.
+    x_bins : np.ndarray
+        1D array of bin edges for x.
+    upsample : int, optional
+        Upsampling factor for increasing resolution before binning. If 0 (default), no upsampling is applied.
+    upsample_method : str, optional
+        Interpolation method for upsampling. Must be compatible with `torch.nn.Upsample`.
+        Common options: "linear", "nearest", "bicubic".
+
+    Returns
+    -------
+    tuple of np.ndarray
+        - Binned y-values (mean per bin)
+        - Count of data points (after upsampling) in each bin
     """
-    if upsampling:
+    if upsample:
+        # Stack x and y as two rows in a 2D array for upsampling
         k = np.full((2, len(x)), np.nan)
         k[0, :] = x
         k[1, :] = y
-        m = torch.nn.Upsample(mode="linear", scale_factor=upsampling)
+
+        # Apply PyTorch interpolation
+        m = torch.nn.Upsample(mode=upsample_method, scale_factor=upsample)
         big = m(torch.from_numpy(np.array([k])))
         x = np.array(big[0, 0, :])
         y = np.array(big[0, 1, :])
 
-    # Apply binning based on histogram function
-    x_nu = np.append(x_bins, 2 * x_bins[-1] - x_bins[-2])
+    # Extend bin edges for histogram: shift by half a bin width for center alignment
+    x_nu = np.append(x_bins, 2 * x_bins[-1] - x_bins[-2])  # Add one final edge
     x_nu = x_nu - (x_nu[1] - x_nu[0]) / 2
-    # Instead of N_x, gives fixed axis.
-    # Solves issues with wider ranges, than covered by data
+
+    # Count how many x-values fall into each bina
     _count, _ = np.histogram(x, bins=x_nu, weights=None)
     _count = np.array(_count, dtype="float64")
     _count[_count == 0] = np.nan
 
+    # Sum of y-values in each bin
     _sum, _ = np.histogram(x, bins=x_nu, weights=y)
+
+    # Return mean y per bin and count
     return _sum / _count, _count
+
+
+def bin_z_over_y(y: np.ndarray, z: np.ndarray, y_binned: np.ndarray):
+    """
+    Bin z-values over y-values using predefined bins.
+    If a bin receives no data, fill it from the previous valid bin above (top-down fill).
+
+    Parameters
+    ----------
+    y : np.ndarray
+        Y-values to be binned.
+    z : np.ndarray
+        Corresponding Z-values (2D array with shape (N, M)).
+    y_binned : np.ndarray
+        Bin edges for y-values.
+
+    Returns
+    -------
+    tuple
+        Binned z-values (2D), and count of points in each bin.
+    """
+    number_of_bins = len(y_binned)
+    counter = np.zeros(number_of_bins, dtype=int)
+    result = np.zeros((number_of_bins, z.shape[1]), dtype=float)
+
+    # Assign y-values to bins
+    dig = np.digitize(y, bins=y_binned) - 1
+    valid_indices = (dig >= 0) & (dig < number_of_bins)
+
+    # Count entries and sum z-values into bins
+    np.add.at(counter, dig[valid_indices], 1)
+    np.add.at(result, dig[valid_indices], z[valid_indices])
+
+    # Average values where data exists
+    with np.errstate(invalid="ignore"):  # Suppress divide-by-zero warnings
+        result[counter > 0] /= counter[counter > 0, None]
+        result[counter == 0] = np.nan  # Mark empty bins as NaN
+
+    # Top-down fill: fill missing rows from previous valid row above
+    last_valid = None
+    for i in range(number_of_bins):
+        if counter[i] > 0:
+            last_valid = result[i].copy()
+        elif last_valid is not None:
+            result[i] = last_valid
+
+    return result, counter
 
 
 # def bin_z_over_y(y: np.ndarray, z: np.ndarray, y_binned: np.ndarray):
@@ -105,157 +179,253 @@ def bin_y_over_x(x: np.ndarray, y: np.ndarray, x_bins: np.ndarray, upsampling: i
 #     Returns:
 #         tuple: (Binned z-values, count of points in each bin)
 #     """
-#     number_of_bins = len(y_binned)
+#     number_of_bins = np.shape(y_binned)[0]
 #     counter = np.zeros(number_of_bins, dtype=int)
 #     result = np.zeros((number_of_bins, z.shape[1]), dtype=float)
 
-#     dig = np.digitize(y, bins=y_binned) - 1
-#     valid_indices = (dig >= 0) & (dig < number_of_bins)
+#     # Find Indizes of x on x_binned
+#     dig = np.digitize(y, bins=y_binned)
 
-#     np.add.at(counter, dig[valid_indices], 1)
-#     np.add.at(result, dig[valid_indices], z[valid_indices])
+#     # Add up counter, I & differential_conductance
+#     for i, d in enumerate(dig):
+#         counter[d - 1] += 1
+#         result[d - 1, :] += z[i, :]
 
-#     with np.errstate(invalid='ignore'):  # Suppress divide-by-zero warnings
-#         result[counter > 0] /= counter[counter > 0, None]
-#         result[counter == 0] = np.nan
+#     # Normalize with counter, rest to np.nan
+#     for i, c in enumerate(counter):
+#         if c > 0:
+#             result[i, :] /= c
+#         elif c == 0:
+#             result[i, :] *= np.nan
 
+#     # Fill up Empty lines with Neighboring Lines
+#     for i, c in enumerate(counter):
+#         if c == 0:  # In case counter is 0, we need to fill up
+#             up, down = i, i  # initialze up, down
+#             while counter[up] == 0 and up < number_of_bins - 1:
+#                 # while up is still smaller -2 and counter is still zero, look for better up
+#                 up += 1
+#             while counter[down] == 0 and down >= 1:
+#                 # while down is still bigger or equal 1 and coutner still zero, look for better down
+#                 down -= 1
+
+#             if up == number_of_bins - 1 or down == 0:
+#                 # Just ignores the edges, when c == 0
+#                 result[i, :] *= np.nan
+#             else:
+#                 # Get Coordinate System
+#                 span = up - down
+#                 relative_pos = i - down
+#                 lower_span = span * 0.25
+#                 upper_span = span * 0.75
+
+#                 # Divide in same as next one and intermediate
+#                 if 0 <= relative_pos <= lower_span:
+#                     result[i, :] = result[down, :]
+#                 elif lower_span < relative_pos < upper_span:
+#                     result[i, :] = np.divide(result[up, :] + result[down, :], 2)
+#                 elif upper_span <= relative_pos <= span:
+#                     result[i, :] = result[up, :]
+#                 else:
+#                     logger.warning("something went wrong!")
 #     return result, counter
-
-
-def bin_z_over_y(y: np.ndarray, z: np.ndarray, y_binned: np.ndarray):
-    """
-    Bin z-values over y-values using predefined bins.
-
-    Parameters:
-        y (np.ndarray): Y-values to be binned.
-        z (np.ndarray): Corresponding Z-values (2D array with shape (N, M)).
-        y_binned (np.ndarray): Bin edges for y-values.
-
-    Returns:
-        tuple: (Binned z-values, count of points in each bin)
-    """
-    number_of_bins = np.shape(y_binned)[0]
-    counter = np.zeros(number_of_bins, dtype=int)
-    result = np.zeros((number_of_bins, z.shape[1]), dtype=float)
-
-    # Find Indizes of x on x_binned
-    dig = np.digitize(y, bins=y_binned)
-
-    # Add up counter, I & differential_conductance
-    for i, d in enumerate(dig):
-        counter[d - 1] += 1
-        result[d - 1, :] += z[i, :]
-
-    # Normalize with counter, rest to np.nan
-    for i, c in enumerate(counter):
-        if c > 0:
-            result[i, :] /= c
-        elif c == 0:
-            result[i, :] *= np.nan
-
-    # Fill up Empty lines with Neighboring Lines
-    for i, c in enumerate(counter):
-        if c == 0:  # In case counter is 0, we need to fill up
-            up, down = i, i  # initialze up, down
-            while counter[up] == 0 and up < number_of_bins - 1:
-                # while up is still smaller -2 and counter is still zero, look for better up
-                up += 1
-            while counter[down] == 0 and down >= 1:
-                # while down is still bigger or equal 1 and coutner still zero, look for better down
-                down -= 1
-
-            if up == number_of_bins - 1 or down == 0:
-                # Just ignores the edges, when c == 0
-                result[i, :] *= np.nan
-            else:
-                # Get Coordinate System
-                span = up - down
-                relative_pos = i - down
-                lower_span = span * 0.25
-                upper_span = span * 0.75
-
-                # Divide in same as next one and intermediate
-                if 0 <= relative_pos <= lower_span:
-                    result[i, :] = result[down, :]
-                elif lower_span < relative_pos < upper_span:
-                    result[i, :] = np.divide(result[up, :] + result[down, :], 2)
-                elif upper_span <= relative_pos <= span:
-                    result[i, :] = result[up, :]
-                else:
-                    logger.warning("something went wrong!")
-    return result, counter
 
 
 # def get_ext(x: np.ndarray, y: np.ndarray, x_lim: tuple, y_lim: tuple):
 #     """
-#     Calculate Extent, X-Limits and Y-Limits from given x, y, x_lim, y_lim
-#     Takes into account of pixel dimension and Nones in xy_lim.
-#     """
+#     Compute the extent and adjusted limits for an image-like representation of data.
+#     Takes into account pixel dimensions and handles None values in limits.
 
-#     pixel_width = np.abs(x[-1] - x[-2])
-#     pixel_height = np.abs(y[-1] - y[-2])
+#     Parameters:
+#         x (np.ndarray): X-axis values.
+#         y (np.ndarray): Y-axis values.
+#         x_lim (tuple): X-axis limits (can contain None values).
+#         y_lim (tuple): Y-axis limits (can contain None values).
+
+#     Returns:
+#         tuple: (Extent, new x limits, new y limits)
+#     """
+#     pixel_width, pixel_height = np.abs(x[-1] - x[-2]), np.abs(y[-1] - y[-2])
 #     ext = (
 #         x[0] - pixel_width / 2,
-#         x[len(x) - 1] + pixel_width / 2,
+#         x[-1] + pixel_width / 2,
 #         y[0] - pixel_height / 2,
-#         y[len(y) - 1] + pixel_height / 2,
+#         y[-1] + pixel_height / 2,
 #     )
 
-#     if x_lim[0] is not None:
-#         new_x_lim_0 = x_lim[0] - pixel_width / 2
-#     else:
-#         new_x_lim_0 = None
-#     if x_lim[1] is not None:
-#         new_x_lim_1 = x_lim[1] + pixel_width / 2
-#     else:
-#         new_x_lim_1 = None
-#     if y_lim[0] is not None:
-#         new_y_lim_0 = y_lim[0] - pixel_height / 2
-#     else:
-#         new_y_lim_0 = None
-#     if y_lim[1] is not None:
-#         new_y_lim_1 = y_lim[1] + pixel_height / 2
-#     else:
-#         new_y_lim_1 = None
-
-#     new_x_lim = (new_x_lim_0, new_x_lim_1)
-#     new_y_lim = (new_y_lim_0, new_y_lim_1)
+#     adjust_limit = lambda lim, pixel_size: (
+#         (lim - pixel_size / 2) if lim is not None else None
+#     )
+#     new_x_lim = (
+#         adjust_limit(x_lim[0], pixel_width),
+#         adjust_limit(x_lim[1], pixel_width),
+#     )
+#     new_y_lim = (
+#         adjust_limit(y_lim[0], pixel_height),
+#         adjust_limit(y_lim[1], pixel_height),
+#     )
 
 #     return ext, new_x_lim, new_y_lim
 
 
-def get_ext(x: np.ndarray, y: np.ndarray, x_lim: tuple, y_lim: tuple):
+def get_ext(
+    x: np.ndarray,
+    y: np.ndarray,
+    x_lim: tuple = (None, None),
+    y_lim: tuple = (None, None),
+):
     """
-    Compute the extent and adjusted limits for an image-like representation of data.
-    Takes into account pixel dimensions and handles None values in limits.
-
-    Parameters:
-        x (np.ndarray): X-axis values.
-        y (np.ndarray): Y-axis values.
-        x_lim (tuple): X-axis limits (can contain None values).
-        y_lim (tuple): Y-axis limits (can contain None values).
-
-    Returns:
-        tuple: (Extent, new x limits, new y limits)
+    Calculate Extent, X-Limits and Y-Limits from given x, y, x_lim, y_lim
+    Takes into account of pixel dimension and Nones in xy_lim.
     """
-    pixel_width, pixel_height = np.abs(x[-1] - x[-2]), np.abs(y[-1] - y[-2])
+
+    pixel_width = np.abs(x[-1] - x[-2])
+    pixel_height = np.abs(y[-1] - y[-2])
     ext = (
         x[0] - pixel_width / 2,
-        x[-1] + pixel_width / 2,
+        x[len(x) - 1] + pixel_width / 2,
         y[0] - pixel_height / 2,
-        y[-1] + pixel_height / 2,
+        y[len(y) - 1] + pixel_height / 2,
     )
 
-    adjust_limit = lambda lim, pixel_size: (
-        (lim - pixel_size / 2) if lim is not None else None
-    )
-    new_x_lim = (
-        adjust_limit(x_lim[0], pixel_width),
-        adjust_limit(x_lim[1], pixel_width),
-    )
-    new_y_lim = (
-        adjust_limit(y_lim[0], pixel_height),
-        adjust_limit(y_lim[1], pixel_height),
-    )
+    if x_lim[0] is not None:
+        new_x_lim_0 = x_lim[0] - pixel_width / 2
+    else:
+        new_x_lim_0 = None
+    if x_lim[1] is not None:
+        new_x_lim_1 = x_lim[1] + pixel_width / 2
+    else:
+        new_x_lim_1 = None
+    if y_lim[0] is not None:
+        new_y_lim_0 = y_lim[0] - pixel_height / 2
+    else:
+        new_y_lim_0 = None
+    if y_lim[1] is not None:
+        new_y_lim_1 = y_lim[1] + pixel_height / 2
+    else:
+        new_y_lim_1 = None
+
+    new_x_lim = (new_x_lim_0, new_x_lim_1)
+    new_y_lim = (new_y_lim_0, new_y_lim_1)
 
     return ext, new_x_lim, new_y_lim
+
+
+def get_z_lim(z_values: np.ndarray, z_lim: tuple = (None, None), z_contrast: float = 1):
+    """
+    Determines the z-axis limits based on the given `z_lim` values and contrast factor.
+
+    Parameters
+    ----------
+    z_values : np.ndarray
+        The dataset from which to calculate the z-limits.
+    z_lim : tuple, optional
+        Tuple specifying the lower and upper limits (default: (None, None)).
+        If `None`, limits are computed based on mean and standard deviation.
+    z_contrast : float, optional
+        Scaling factor for standard deviation to adjust z-limits (default: 1).
+
+    Returns
+    -------
+    tuple
+        A tuple (z_lim_0, z_lim_1) representing the computed or given z-axis limits.
+    """
+    delta_z = np.nanstd(z_values) * z_contrast
+    mean_z = np.nanmean(z_values)
+
+    z_lim_0 = z_lim[0] if z_lim[0] is not None else mean_z - delta_z
+    z_lim_1 = z_lim[1] if z_lim[1] is not None else mean_z + delta_z
+
+    return z_lim_0, z_lim_1
+
+
+def get_norm(values):
+    """
+    Determines an appropriate normalization factor and corresponding SI prefix
+    for a given set of values.
+
+    The function finds the largest absolute value in `values` and selects the
+    smallest normalization factor from a predefined list that is still
+    smaller than or equal to this maximum value.
+
+    Parameters
+    ----------
+    values : array-like
+        Input numerical values that need to be normalized.
+
+    Returns
+    -------
+    float
+        The selected normalization factor.
+    str
+        The corresponding SI unit prefix.
+
+    Examples
+    --------
+    >>> get_norm([0.002, 0.005, 0.009])
+    (0.001, 'm')
+
+    >>> get_norm([5e6, 1e7, 3e8])
+    (1000000.0, 'M')
+    """
+    norm_values = [1e9, 1e6, 1e3, 1e0, 1e-3, 1e-6, 1e-9, 1e-12, 1e-15]
+    norm_string = ["G", "M", "k", "", "m", "µ", "n", "p", "f"]
+
+    max_value = np.nanmax(np.abs(values))
+    where_norm_is_smaller = norm_values <= max_value
+    index = np.where(where_norm_is_smaller)[0][0]
+
+    return norm_values[index], norm_string[index]
+
+
+def get_power(amplitude, R=50):
+    """
+    Convert a real voltage amplitude (peak) to power in dBm.
+
+    Parameters
+    ----------
+    amplitude : float or np.ndarray
+        Voltage amplitude (in volts).
+    R : float, optional
+        System impedance in ohms. Defaults to 50 ohms.
+
+    Returns
+    -------
+    power_dbm : float or np.ndarray
+        Corresponding power in dBm.
+
+    Notes
+    -----
+    Assumes power = V^2 / R, and converts to dBm using:
+        dBm = 10 * log10(power in watts / 1e-3)
+    """
+    power_watts = amplitude**2 / R  # Calculate power in watts
+    power_dbm = 10 * np.log10(power_watts / 1e-3)  # Convert to dBm (1 mW reference)
+    return power_dbm
+
+
+def get_amplitude(power_dbm, R=50):
+    """
+    Convert power in dBm to real voltage amplitude (peak).
+
+    Parameters
+    ----------
+    power_dbm : float or np.ndarray
+        Power in dBm.
+    R : float, optional
+        System impedance in ohms. Defaults to 50 ohms.
+
+    Returns
+    -------
+    amplitude : float or np.ndarray
+        Corresponding voltage amplitude (in volts).
+
+    Notes
+    -----
+    Inverts the formula:
+        power = V^2 / R,
+    after converting dBm to watts.
+    """
+    power_watts = 10 ** (power_dbm / 10) * 1e-3  # Convert dBm to watts
+    amplitude = np.sqrt(power_watts * R)  # Solve for voltage
+    return amplitude
