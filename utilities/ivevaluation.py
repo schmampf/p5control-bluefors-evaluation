@@ -983,7 +983,7 @@ class IVEvaluation(BaseEvaluation):
                 ) = bin_z_over_y(
                     amplitude,
                     to_evaluate[string],
-                    self.mapped["amplitude_axis"],
+                    self.amplitude_axis,
                 )
             for string in [
                 "temperature",
@@ -997,18 +997,47 @@ class IVEvaluation(BaseEvaluation):
                 ) = bin_y_over_x(
                     amplitude,
                     to_evaluate[string],
-                    self.mapped["amplitude_axis"],
+                    self.amplitude_axis,
                 )
 
         return tuple(evaluated)
 
-    # TODO
+    # TODO Test Function!
     def getMapsTemperature(self, already_evaluated: list[dict]):
         logger.info("(%s) getMapsTemperature()", self._iv_eva_name)
+        evaluated = []
+        for index_to_evaluate, to_evaluate in enumerate(already_evaluated):
+            evaluated.append(self.get_empty_dictionary())
+            for string in [
+                "current",
+                "time_current",
+                "temperature_current",
+                "voltage",
+                "time_voltage",
+                "temperature_voltage",
+                "differential_conductance",
+                "differential_resistance",
+            ]:
+                (
+                    evaluated[index_to_evaluate][string],
+                    evaluated[index_to_evaluate][f"{string}_counter"],
+                ) = bin_z_over_y(
+                    evaluated[index_to_evaluate]["temperature"],
+                    to_evaluate[string],
+                    self.temperature_axis,
+                )
+            for string in ["time_start", "time_stop", "temperature"]:
 
-        # TODO!!!
+                (
+                    evaluated[index_to_evaluate][string],
+                    evaluated[index_to_evaluate][f"{string}_counter"],
+                ) = bin_y_over_x(
+                    evaluated[index_to_evaluate]["temperature"],
+                    to_evaluate[string],
+                    self.temperature_axis,
+                )
 
-        return tuple(already_evaluated)
+        return tuple(evaluated)
 
     # endregion
 
