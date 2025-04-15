@@ -1002,27 +1002,27 @@ class IVEvaluation(BaseEvaluation):
 
         return tuple(evaluated)
 
-    # TODO Test Function!
     def getMapsTemperature(self, already_evaluated: list[dict]):
         logger.info("(%s) getMapsTemperature()", self._iv_eva_name)
         evaluated = []
         for index_to_evaluate, to_evaluate in enumerate(already_evaluated):
+            temperature = already_evaluated[index_to_evaluate]["temperature"]
             evaluated.append(self.get_empty_dictionary())
             for string in [
                 "current",
                 "time_current",
                 "temperature_current",
+                "differential_conductance",
                 "voltage",
                 "time_voltage",
                 "temperature_voltage",
-                "differential_conductance",
                 "differential_resistance",
             ]:
                 (
                     evaluated[index_to_evaluate][string],
                     evaluated[index_to_evaluate][f"{string}_counter"],
                 ) = bin_z_over_y(
-                    evaluated[index_to_evaluate]["temperature"],
+                    temperature,
                     to_evaluate[string],
                     self.temperature_axis,
                 )
@@ -1032,7 +1032,7 @@ class IVEvaluation(BaseEvaluation):
                     evaluated[index_to_evaluate][string],
                     evaluated[index_to_evaluate][f"{string}_counter"],
                 ) = bin_y_over_x(
-                    evaluated[index_to_evaluate]["temperature"],
+                    temperature,
                     to_evaluate[string],
                     self.temperature_axis,
                 )
