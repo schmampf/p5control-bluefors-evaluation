@@ -64,7 +64,7 @@ class IVPlot(IVEvaluation, BasePlot):
         self.y_characters = ["$y$", ""]
 
         self.iv_plot = {
-            "fig_size": (8, 4.5),
+            "fig_size": (6, 4),
             "dpi": 100,
             "cmap": cmap(bad="grey"),
             "smoothing": True,
@@ -320,6 +320,9 @@ class IVPlot(IVEvaluation, BasePlot):
         i_norm_value, i_norm_string = get_norm(i)
         v_norm_value, v_norm_string = get_norm(v)
 
+        i /= i_norm_value
+        v /= v_norm_value
+
         # set tick style
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
         ax.tick_params(direction="in", right=True, top=True)
@@ -327,12 +330,12 @@ class IVPlot(IVEvaluation, BasePlot):
         if not inverse:
             ax.set_ylabel(rf"$V$ ({v_norm_string}V)")
             ax.set_xlabel(rf"$I$ ({i_norm_string}A)")
-            ax.plot(i / i_norm_value, v / v_norm_value, ".")
+            ax.plot(i, v, ".")
 
         else:
             ax.set_xlabel(rf"$V$ ({v_norm_string}V)")
             ax.set_ylabel(rf"$I$ ({i_norm_string}A)")
-            ax.plot(v / v_norm_value, i / i_norm_value, ".")
+            ax.plot(v, i, ".")
 
         return ax
 
@@ -872,7 +875,34 @@ class IVPlot(IVEvaluation, BasePlot):
     # endregion
 
     # region get fig
-    def fig_didv_T(
+
+    def fig_didv_vy(
+        self,
+        fig_nr: int = 0,
+        x_lim: tuple = (None, None),
+        y_lim: tuple = (None, None),
+        z_lim: tuple = (None, None),
+    ):
+        plt.close(fig_nr)
+        fig, axs = plt.subplots(
+            num=fig_nr,
+            nrows=1,
+            ncols=2,
+            figsize=self.fig_size,
+            dpi=self.dpi,
+            gridspec_kw={"width_ratios": [4, 0.2]},
+            constrained_layout=True,
+        )
+        # get axs
+        axs[0], axs[1] = self.ax_didv_vy(faxs=[fig, axs[0], axs[1]], z_lim=z_lim)
+
+        # set limits
+        axs[0].set_xlim(x_lim)
+        axs[0].set_ylim(y_lim)
+
+        return fig, axs
+
+    def fig_didv_vy_T(
         self,
         fig_nr: int = 0,
         x_lim: tuple = (None, None),
@@ -884,8 +914,8 @@ class IVPlot(IVEvaluation, BasePlot):
             num=fig_nr,
             nrows=1,
             ncols=3,
-            figsize=(8, 4.5),
-            dpi=100,
+            figsize=self.fig_size,
+            dpi=self.dpi,
             gridspec_kw={"width_ratios": [1, 4, 0.2]},
             constrained_layout=True,
         )
@@ -905,11 +935,9 @@ class IVPlot(IVEvaluation, BasePlot):
         axs[1].set_xlim(x_lim)
         axs[1].set_ylim(y_lim)
 
-        fig.suptitle(f"{self.sub_folder}/{self.title}/{self.title_of_plot}")
-
         return fig, axs
 
-    def fig_didv(
+    def fig_dvdi_iy(
         self,
         fig_nr: int = 0,
         x_lim: tuple = (None, None),
@@ -921,36 +949,8 @@ class IVPlot(IVEvaluation, BasePlot):
             num=fig_nr,
             nrows=1,
             ncols=2,
-            figsize=(8, 4.5),
-            dpi=100,
-            gridspec_kw={"width_ratios": [4, 0.2]},
-            constrained_layout=True,
-        )
-        # get axs
-        axs[0], axs[1] = self.ax_didv_vy(faxs=[fig, axs[0], axs[1]], z_lim=z_lim)
-
-        # set limits
-        axs[0].set_xlim(x_lim)
-        axs[0].set_ylim(y_lim)
-
-        fig.suptitle(f"{self.sub_folder}/{self.title}/{self.title_of_plot}")
-
-        return fig, axs
-
-    def fig_dvdi(
-        self,
-        fig_nr: int = 0,
-        x_lim: tuple = (None, None),
-        y_lim: tuple = (None, None),
-        z_lim: tuple = (None, None),
-    ):
-        plt.close(fig_nr)
-        fig, axs = plt.subplots(
-            num=fig_nr,
-            nrows=1,
-            ncols=2,
-            figsize=(8, 4.5),
-            dpi=100,
+            figsize=self.fig_size,
+            dpi=self.dpi,
             gridspec_kw={"width_ratios": [4, 0.2]},
             constrained_layout=True,
         )
@@ -961,9 +961,137 @@ class IVPlot(IVEvaluation, BasePlot):
         axs[0].set_xlim(x_lim)
         axs[0].set_ylim(y_lim)
 
-        fig.suptitle(f"{self.sub_folder}/{self.title}/{self.title_of_plot}")
+        return fig, axs
+
+    def fig_dvdi_iy_T(
+        self,
+        fig_nr: int = 0,
+        x_lim: tuple = (None, None),
+        y_lim: tuple = (None, None),
+        z_lim: tuple = (None, None),
+    ):
+        plt.close(fig_nr)
+        fig, axs = plt.subplots(
+            num=fig_nr,
+            nrows=1,
+            ncols=3,
+            figsize=self.fig_size,
+            dpi=self.dpi,
+            gridspec_kw={"width_ratios": [1, 4, 0.2]},
+            constrained_layout=True,
+        )
+        # get axs
+        axs[1], axs[2] = self.ax_dvdi_iy(faxs=[fig, axs[1], axs[2]], z_lim=z_lim)
+        axs[0] = self.ax_T_y(
+            ax=axs[0], inverse=True, marker=".", linestyle="", color="grey"
+        )
+
+        # modify
+        axs[0].xaxis.set_inverted(True)
+        axs[0].sharey(axs[1])
+        plt.setp(axs[1].get_yticklabels(), visible=False)
+        axs[1].set_ylabel("")
+
+        # set limits
+        axs[0].set_xlim(x_lim)
+        axs[0].set_ylim(y_lim)
 
         return fig, axs
+
+    def fig_ivs(
+        self,
+        index: int = 0,
+        plain: bool = False,
+        fig_nr: int = 0,
+        x_lim: tuple = (None, None),
+        y_lim: tuple = (None, None),
+    ):
+        import numpy as np
+        import matplotlib.pyplot as plt
+        from matplotlib.animation import FuncAnimation
+
+        plt.close(fig_nr)
+        fig, ax = plt.subplots(
+            num=fig_nr,
+            nrows=1,
+            ncols=1,
+            figsize=self.fig_size,
+            dpi=self.dpi,
+            constrained_layout=True,
+        )
+
+        (line,) = ax.plot([], [], "r.")
+
+        i, v, t = self.get_ivt(index=0)
+        # get_norm
+        v_norm_value, v_norm_string = get_norm(v)
+        i_norm_value, i_norm_string = get_norm(i)
+
+        # Initialization function: plot empty frame
+        def init():
+            line.set_data(v / v_norm_value, i / i_norm_value)
+            return (line,)
+
+        # set limits
+        ax.set_xlim(x_lim)
+        ax.set_ylim(y_lim)
+
+        def update(frame):
+            i, v, _ = self.get_ivt(index=frame)
+            line.set_data(v / v_norm_value, i / i_norm_value)
+            return (line,)
+
+        frames = np.arange(self.mapped["y_axis"].shape[0])
+
+        ani = FuncAnimation(
+            fig, update, frames=frames, init_func=init, blit=False, interval=20
+        )
+        plt.show()
+        ani.save("sine_wave.mp4", fps=30)
+
+        return fig, ax
+
+    # endregion
+
+    # begin plot all
+
+    def plot_all(self, leading_index: int = 0):
+        i = 0
+        fig, axs = self.fig_didv_vy(z_lim=(None, None), fig_nr=leading_index + i)
+
+        fig.suptitle(f"{self.sub_folder}/{self.title}/{self.title_of_plot}/didv_vy")
+
+        self.saveFigure(fig, sub_title="didv_vy", sub_folder=self.title_of_plot)
+
+        i += 1
+
+        fig, axs = self.fig_didv_vy_T(z_lim=(None, None), fig_nr=leading_index + i)
+
+        fig.suptitle(f"{self.sub_folder}/{self.title}/{self.title_of_plot}/didv_vy_T")
+
+        self.saveFigure(fig, sub_title="didv_vy_T", sub_folder=self.title_of_plot)
+
+        i += 1
+
+        fig, axs = self.fig_dvdi_iy(z_lim=(None, None), fig_nr=leading_index + i)
+
+        fig.suptitle(f"{self.sub_folder}/{self.title}/{self.title_of_plot}/dvdi_iy")
+
+        self.saveFigure(fig, sub_title="dvdi_iy", sub_folder=self.title_of_plot)
+
+        i += 1
+
+        fig, axs = self.fig_dvdi_iy_T(z_lim=(None, None), fig_nr=leading_index + i)
+
+        fig.suptitle(f"{self.sub_folder}/{self.title}/{self.title_of_plot}/dvdi_iy_T")
+
+        self.saveFigure(fig, sub_title="dvdi_iy_T", sub_folder=self.title_of_plot)
+
+        i += 1
+
+        # get axs
+        for index, y_value in enumerate(self.mapped["y_axis"]):
+            print(index, y_value)
 
     # endregion
 
