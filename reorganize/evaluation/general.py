@@ -51,7 +51,7 @@ from h5py import File, Group, Dataset
 
 # local
 from integration.files import DataCollection
-from utilities.logger import logger
+import utilities.logging as Logger
 
 # endregion
 
@@ -68,13 +68,13 @@ class MeasurementHeader:
     )  # min, max, step
 
     def to_string(self) -> str:
-        return f"{self.name}: ({self.variable}) [{self.constants}] {self.varied_range}"
+        return f"{self.name}: ({self.variable}) {self.varied_range} [{self.constants}]"
 
     @staticmethod
     def from_string(header: str) -> "MeasurementHeader":
 
         parts = header.split(" ")
-        
+
         if parts[0].startswith("vna"):
             name = ""
             variable = parts[0]
@@ -82,41 +82,47 @@ class MeasurementHeader:
             name = parts[0]
             variable = parts[1]
 
-        def map_const(part: str) -> tuple: # map sth from "constDecl_+0.000Unit" to ("constDecl", +0.000, "Unit")
-            
+        def map_const(
+            part: str,
+        ) -> (
+            tuple
+        ):  # map sth from "constDecl_+0.000Unit" to ("constDecl", +0.000, "Unit")
+
             subparts = part.split("_")
             decl = subparts[0]
-            
+
             val_arg = subparts[1]
-            
+
             value, unit = MeasurementHeader.parse_number(val_arg)
-            
+
             return (decl, value, unit)
-        
+
         constants = []
-        
+
         for part in parts[1:]:
             if part.startswith("vna"):
                 part = part.split("_")
                 constants.append(map_const("vna_" + part[1]))
                 constants.append(map_const("vna_" + part[2]))
             else:
-                constants.append(map_const(part))    
+                constants.append(map_const(part))
 
         return MeasurementHeader(name, variable, constants, ())
-    
+
     @staticmethod
-    def parse_number(s: str) -> tuple: # "Sign0.01Unit" -> (0.01, "Unit")
+    def parse_number(s: str) -> tuple:  # "Sign0.01Unit" -> (0.01, "Unit")
         sign = -1 if s[0] == "-" else 1
+
         def isDigit(s: str) -> bool:
             return s.isdigit() or s == "."
+
         s_str = "".join(filter(isDigit, s[1:]))
         value = float(s_str) * sign if not s_str == "" else np.nan
         if s_str == "":
             offset = 3
         if not s_str == "":
-            offset = 1+len(s_str)
-            
+            offset = 1 + len(s_str)
+
         unit = s[offset:]
         return value, unit
 
@@ -131,6 +137,11 @@ class Parameters:
     )
     available_measurements: List[MeasurementHeader] = field(default_factory=lambda: [])
 
+    def __setattr__(self, name: str, value: Any):
+        if name == "volt_amp" and not np.array_equal(value, np.array([0.0, 0.0])):
+            Logger.print(Logger.DEBUG, msg=f"Params.{name} = {value}")
+        object.__setattr__(self, name, value)
+
 
 @dataclass
 class Curve:
@@ -144,17 +155,10 @@ def setup(collection: DataCollection):
     collection.packets["params"] = Parameters()
 
     name = collection.data.name
-    logger.info("(%s) + Setup GenEval Completed!", name)
+    Logger.print(Logger.INFO, Logger.START, "GenEval.setup()")
 
 
 # class Measurements(Enum):
-
-
-# def select_measurement(collection: DataCollection, header: MeasurementHeader):
-#     """
-#     Select a specific measurement for evaluation.
-#     """
-#     logger.debug("(%s) select_measurement()", collection.packets["data"].name)
 
 
 def showAmplification(collection: DataCollection):
@@ -162,12 +166,12 @@ def showAmplification(collection: DataCollection):
     Plots the voltage amplification over time for the entire measurement.
     """
     data = collection.packets["data"]
-    logger.debug("(%s) showAmplifications()", data.name)
+    Logger.print(Logger.INFO, Logger.START, "GenEval.showAmplifications()")
     file_name = f"{data.file_directory}{data.file_folder}{data.file_name}"
 
     # check if file exists
     if not os.path.exists(file_name):
-        logger.error("(%s) Error: File does not exist: %s", data.name, file_name)
+        Logger.print(Logger.ERROR, msg=f"Error: File does not exist: {file_name}")
         return
 
     with File(file_name, "r") as data_file:
@@ -177,7 +181,7 @@ def showAmplification(collection: DataCollection):
         elif data_file.__contains__("status/femtos"):
             femto_key = "femtos"
         else:
-            logger.error("(%s) ...femto(s) status not found.", data.name)
+            Logger.print(Logger.ERROR, msg="Femto status not found.")
             return
 
         femto_data = np.array(data_file[f"status/{femto_key}"])
@@ -209,31 +213,36 @@ def showFileMeasurements(collection: DataCollection):
     Displays the available measurement keys in the HDF5 file.
     """
     data = collection.packets["data"]
-    logger.debug("(%s) showMeasurements()", data.name)
+    Logger.print(Logger.INFO, Logger.START, "GenEval.showFileMeasurements()")
     file_name = f"{data.file_directory}{data.file_folder}{data.file_name}"
 
     # check if file exists
     if not os.path.exists(file_name):
-        logger.error("(%s) Error: File does not exist: %s", data.name, file_name)
+        # logger.error("(%s) Error: File does not exist: %s", data.name, file_name)
+        Logger.print(Logger.ERROR, msg=f"Error: File does not exist: {file_name}")
         return
 
     # show selected file
-    logger.info("(%s) Opening file: %s", data.name, file_name)
+    Logger.print(Logger.DEBUG, msg=f"Opening file: {file_name}")
 
     with File(file_name, "r") as data_file:
         keys = list(data_file.keys())
-        logger.info("Available measurements: %s", keys)
+        Logger.print(Logger.INFO, msg=f"Available measurements: {keys}")
 
 
 def showLoadedMeasurements(collection: DataCollection):
     """
     Displays the available measurement types, currently loaded.
     """
-    data = collection.packets["data"]
-    logger.debug("(%s) showMeasurements()", data.name)
-    logger.info(
-        "(%s) Available measurements: %s", data.name, data.available_measurements
-    )
+    Logger.print(Logger.INFO, Logger.START, "GenEval.showLoadedMeasurements()")
+
+    num_headers = len(collection.params.available_measurements)
+    num_digits = len(str(num_headers))
+    for i, header in enumerate(collection.params.available_measurements):
+        Logger.print(
+            Logger.INFO,
+            msg=f"[{i+1:>{num_digits}}] {header.to_string()}",
+        )
 
 
 def loadMeasurements(
@@ -242,40 +251,57 @@ def loadMeasurements(
     """
     Loads the specified measurement type and key from the HDF5 file.
     """
-    data = collection.packets["data"]
-    logger.debug("(%s) loadMeasurements()", data.name)
+    data = collection.data
+    Logger.print(Logger.INFO, Logger.START, "GenEval.loadMeasurements()")
 
     # check if file exists
     file_name = f"{data.file_directory}{data.file_folder}{data.file_name}"
     if not os.path.exists(file_name):
-        logger.error("(%s) Error: File does not exist: %s", data.name, file_name)
+        Logger.print(Logger.ERROR, msg=f"Error: File does not exist: {file_name}")
         return
 
     # show selected file
-    logger.info("(%s) Opening file: %s", data.name, file_name)
+    Logger.print(Logger.DEBUG, msg=f"Opening file: {file_name}")
 
     with File(file_name, "r") as data_file:
         # get available measurements from file
         measurement_group = data_file.get("measurement")
-        
+
         headers = []
-        
+
         if measurement_group and isinstance(measurement_group, Group):
             for measurement_name in measurement_group.keys():
                 subgroup = measurement_group[measurement_name]
-                
+
                 if isinstance(subgroup, Group):
                     header = MeasurementHeader.from_string(measurement_name)
-                    
+
                     params = []
                     for subkey in subgroup.keys():
                         params.append(MeasurementHeader.parse_number(subkey))
-                    
+
                     min = np.min(list(map(lambda x: x[0], params)))
                     max = np.max(list(map(lambda x: x[0], params)))
                     step = params[1][0] - params[0][0]
                     header.varied_range = (min, max, step)
-                    
+
                     headers.append(header)
-        
-        collection.packets["params"].available_measurements = headers
+
+        collection.params.available_measurements = headers
+
+
+def select_measurement(collection: DataCollection, header_index: int):
+    Logger.print(
+        Logger.INFO,
+        Logger.START,
+        msg=f"GenEval.select_measurement(index={header_index})",
+    )
+
+    collection.params.selected_measurement = collection.params.available_measurements[
+        header_index - 1
+    ]
+
+    Logger.print(
+        Logger.DEBUG,
+        msg=f"Selected: {collection.params.selected_measurement.to_string()}",
+    )

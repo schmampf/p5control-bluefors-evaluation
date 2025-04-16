@@ -42,7 +42,7 @@ from qtpy.QtGui import QIcon
 
 # local
 from utilities.hdf5view.mainwindow import MainWindow
-from utilities.logger import logger
+import utilities.logging as Logger
 
 # endregion
 
@@ -62,7 +62,7 @@ class FileData:
 
     def __setattr__(self, name: str, value: Any):
         if not self.name == "default":
-            logger.info("(%s) * FileData.%s = %s", self.name, name, value)
+            Logger.print(Logger.DEBUG, msg=f"FileData.{name} = {value}")
         object.__setattr__(self, name, value)
 
 
@@ -95,15 +95,15 @@ def saveData(collection: DataCollection, title: str = ""):
     Save the object's attributes to a file.
     """
 
-    logger.info("(%s) saveData()", collection.packets["data"].name)
+    Logger.print(Logger.INFO, Logger.START, f"Files.saveData(title={title})")
     if not title:
-        title = f"{collection.packets["data"].title}.pickle"
+        title = f"{collection.data.title}.pickle"
 
     # Ensure data folder exists
     folder = os.path.join(
         os.getcwd(),
-        collection.packets["data"].data_folder,
-        collection.packets["data"].sub_folder,
+        collection.data.data_folder,
+        collection.data.sub_folder,
     )
     if not os.path.isdir(folder):
         os.makedirs(folder)
@@ -124,6 +124,7 @@ def saveData(collection: DataCollection, title: str = ""):
 
     # Save data
     filepath = os.path.join(folder, title)
+    Logger.print(Logger.DEBUG, msg=f"Location: {filepath}")
     with open(filepath, "wb") as file:
         pickle.dump(to_store, file)
 
@@ -133,16 +134,23 @@ def loadData(collection: DataCollection, title: str = ""):
     Load attributes from a previously saved file.
     """
 
-    logger.info("(%s) loadData()", collection.packets["data"].name)
+    Logger.print(Logger.INFO, Logger.START, f"Files.loadData(title={title})")
+
     if not title:
-        title = f"{collection.packets["data"].title}.pickle"
+        title = f"{collection.data.title}.pickle"
 
     filepath = os.path.join(
         os.getcwd(),
-        collection.packets["data"].data_folder,
-        collection.packets["data"].sub_folder,
+        collection.data.data_folder,
+        collection.data.sub_folder,
         title,
     )
+
+    # Check if the file exists
+    if not os.path.isfile(filepath):
+        Logger.print(Logger.ERROR, msg=f"File not found: {filepath}")
+        return
+
     with open(filepath, "rb") as file:
         loaded_data = pickle.load(file)
 
@@ -151,24 +159,25 @@ def loadData(collection: DataCollection, title: str = ""):
         if key not in collection.fields_ignore_on_save:
             collection.packets[label].__dict__[key] = value
 
-    print(collection.packets["data"].__dict__)
-
 
 def showData(collection: DataCollection):
     """Display stored attributes excluding those marked for ignoring."""
 
-    logger.info("(%s) showData()", collection.packets["data"].name)
+    Logger.print(Logger.INFO, Logger.START, "Files.showData()")
+
     to_show = {}
     for label, packet in collection.packets.items():
         for key, value in packet.__dict__.items():
             if key not in collection.fields_ignore_on_save:
                 to_show[f"{label}.{key}"] = value
-    return to_show
+
+    for title, content in to_show.items():
+        Logger.print(Logger.INFO, msg=f"{title}: {content}")
 
 
 def showFile(data: FileData):
     """Display the HDF5 file using the GUI."""
-    logger.info("(%s) showFile()", data.name)
+    Logger.print(Logger.INFO, Logger.START, "Files.showDile()")
     file_name = getfile_path(data)
 
     app = QApplication(sys.argv)
@@ -183,7 +192,9 @@ def showFile(data: FileData):
 
 def getfile_path(data: FileData) -> str:
     """Construct the full file path from the data attributes."""
-    logger.info("(%s) file_path()", data.name)
+
+    Logger.print(Logger.DEBUG, msg=f"Files.getfile_path()")
+
     return os.path.join(
         data.file_directory,
         data.file_folder,
@@ -192,13 +203,20 @@ def getfile_path(data: FileData) -> str:
 
 
 def setup(collection: DataCollection, name: str = "", root_dir: str = ""):
+    """
+    Setup the file data attributes and directory structure.
+    If no root directory is provided, default directories are assumed.
+    """
+
+    Logger.print(
+        Logger.INFO, Logger.START, f"Files.setup(name={name}, root_dir={root_dir})"
+    )
 
     data = collection.packets["data"]
     data.name = name
     if not root_dir:
-        logger.warning(
-            "(%s) The project root directory not set. Assuming defaults.",
-            data.name,
+        Logger.print(
+            Logger.WARNING, msg="The project root directory not set. Assuming defaults."
         )
 
         username = os.getlogin()
@@ -218,4 +236,3 @@ def setup(collection: DataCollection, name: str = "", root_dir: str = ""):
 
         file_directory = root_dir
     data.file_directory = file_directory
-    logger.info("(%s) + Setup Files completed!", data.name)
