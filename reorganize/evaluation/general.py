@@ -47,7 +47,7 @@ from typing import Dict, Any, List
 # 3rd party
 import numpy as np
 import matplotlib.pyplot as plt
-from h5py import File
+from h5py import File, Group, Dataset
 
 # local
 from integration.files import DataCollection
@@ -71,21 +71,54 @@ class MeasurementHeader:
         return f"{self.name}: ({self.variable}) [{self.constants}] {self.varied_range}"
 
     @staticmethod
-    def fromString(string: str) -> "MeasurementHeader":
+    def from_string(header: str) -> "MeasurementHeader":
 
-        parts = string.split(":")
-        name = parts[0].strip()
+        parts = header.split(" ")
+        
+        if parts[0].startswith("vna"):
+            name = ""
+            variable = parts[0]
+        else:
+            name = parts[0]
+            variable = parts[1]
 
-        variable, constants, varied_range = parts[1].split("[")
-        variable = variable.strip()
+        def map_const(part: str) -> tuple: # map sth from "constDecl_+0.000Unit" to ("constDecl", +0.000, "Unit")
+            
+            subparts = part.split("_")
+            decl = subparts[0]
+            
+            val_arg = subparts[1]
+            
+            value, unit = MeasurementHeader.parse_number(val_arg)
+            
+            return (decl, value, unit)
+        
+        constants = []
+        
+        for part in parts[1:]:
+            if part.startswith("vna"):
+                part = part.split("_")
+                constants.append(map_const("vna_" + part[1]))
+                constants.append(map_const("vna_" + part[2]))
+            else:
+                constants.append(map_const(part))    
 
-        constants = constants.strip("]").split(",")
-        constants = [tuple(map(str.strip, c.split("="))) for c in constants]
-
-        varied_range = varied_range.strip(")").split(",")
-        varied_range = tuple(map(float, varied_range))
-
-        return MeasurementHeader(name, variable, constants, varied_range)
+        return MeasurementHeader(name, variable, constants, ())
+    
+    @staticmethod
+    def parse_number(s: str) -> tuple: # "Sign0.01Unit" -> (0.01, "Unit")
+        sign = -1 if s[0] == "-" else 1
+        def isDigit(s: str) -> bool:
+            return s.isdigit() or s == "."
+        s_str = "".join(filter(isDigit, s[1:]))
+        value = float(s_str) * sign if not s_str == "" else np.nan
+        if s_str == "":
+            offset = 3
+        if not s_str == "":
+            offset = 1+len(s_str)
+            
+        unit = s[offset:]
+        return value, unit
 
 
 @dataclass
@@ -224,12 +257,25 @@ def loadMeasurements(
     with File(file_name, "r") as data_file:
         # get available measurements from file
         measurement_group = data_file.get("measurement")
-        if isinstance(measurement_group, File):
-            measurements = measurement_group.keys()
-        else:
-            logger.error(
-                "(%s) 'measurement' is not a group or does not exist.", data.name
-            )
-            return
-
-        # logger.info("Available measurements: %s", keys)
+        
+        headers = []
+        
+        if measurement_group and isinstance(measurement_group, Group):
+            for measurement_name in measurement_group.keys():
+                subgroup = measurement_group[measurement_name]
+                
+                if isinstance(subgroup, Group):
+                    header = MeasurementHeader.from_string(measurement_name)
+                    
+                    params = []
+                    for subkey in subgroup.keys():
+                        params.append(MeasurementHeader.parse_number(subkey))
+                    
+                    min = np.min(list(map(lambda x: x[0], params)))
+                    max = np.max(list(map(lambda x: x[0], params)))
+                    step = params[1][0] - params[0][0]
+                    header.varied_range = (min, max, step)
+                    
+                    headers.append(header)
+        
+        collection.packets["params"].available_measurements = headers

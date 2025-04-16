@@ -169,11 +169,7 @@ def showData(collection: DataCollection):
 def showFile(data: FileData):
     """Display the HDF5 file using the GUI."""
     logger.info("(%s) showFile()", data.name)
-    file_name = os.path.join(
-        data.file_directory,
-        data.file_folder,
-        data.file_name,
-    )
+    file_name = getfile_path(data)
 
     app = QApplication(sys.argv)
     app.setOrganizationName("hdf5view")
@@ -183,6 +179,16 @@ def showFile(data: FileData):
     window.show()
     window.open_file(file_name)
     app.exec()
+
+
+def getfile_path(data: FileData) -> str:
+    """Construct the full file path from the data attributes."""
+    logger.info("(%s) file_path()", data.name)
+    return os.path.join(
+        data.file_directory,
+        data.file_folder,
+        data.file_name,
+    )
 
 
 def setup(collection: DataCollection, name: str = "", root_dir: str = ""):
