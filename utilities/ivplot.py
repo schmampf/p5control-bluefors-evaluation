@@ -84,14 +84,32 @@ class IVPlot(IVEvaluation, BasePlot):
     ):
         if plain:
             ivt = self.to_plot["plain"]["iv_tuples"][0]
-            i = ivt[0][skip[0] : skip[1]]
-            v = ivt[1][skip[0] : skip[1]]
-            t = ivt[2][skip[0] : skip[1]]
+            i = np.copy(ivt[0][skip[0] : skip[1]])
+            v = np.copy(ivt[1][skip[0] : skip[1]])
+            t = np.copy(ivt[2][skip[0] : skip[1]])
         else:
             ivt = self.to_plot["iv_tuples"][index]
-            i = ivt[0]
-            v = ivt[1]
-            t = ivt[2]
+            i = np.copy(ivt[0])
+            v = np.copy(ivt[1])
+            t = np.copy(ivt[2])
+        return i, v, t
+
+    def get_ivt_raw(
+        self,
+        index: int = 0,
+        plain: bool = False,
+        skip: list[int] = [10, -10],
+    ):
+        if plain:
+            ivt = self.to_plot["plain"]["iv_tuples_raw"][0]
+            i = np.copy(ivt[0][skip[0] : skip[1]])
+            v = np.copy(ivt[1][skip[0] : skip[1]])
+            t = np.copy(ivt[2][skip[0] : skip[1]])
+        else:
+            ivt = self.to_plot["iv_tuples"][index]
+            i = np.copy(ivt[0])
+            v = np.copy(ivt[1])
+            t = np.copy(ivt[2])
         return i, v, t
 
     def get_i_v(
@@ -216,6 +234,8 @@ class IVPlot(IVEvaluation, BasePlot):
         plain: bool = False,
         fig_nr: int = 0,
         inverse: bool = False,
+        raw: bool = False,
+        **kwargs,
     ):
         if not ax:
             # Generate Figure
@@ -223,11 +243,18 @@ class IVPlot(IVEvaluation, BasePlot):
             fig, ax = plt.subplots(num=fig_nr)
 
         # get data
-        i, _, t = self.get_ivt(
-            index,
-            plain,
-            skip,
-        )
+        if raw:
+            i, _, t = self.get_ivt_raw(
+                index,
+                plain,
+                skip,
+            )
+        else:
+            i, _, t = self.get_ivt(
+                index,
+                plain,
+                skip,
+            )
         t -= np.nanmin(t)
 
         # get_norm
@@ -238,17 +265,17 @@ class IVPlot(IVEvaluation, BasePlot):
         t /= t_norm_value
 
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", right=True, top=True)
+        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
 
         if not inverse:
             ax.set_ylabel(rf"$I$ ({i_norm_string}A)")
             ax.set_xlabel(rf"$t$ ({t_norm_string}s)")
-            ax.plot(t, i, ".")
+            ax.plot(t, i, ".", **kwargs)
 
         else:
             ax.set_xlabel(rf"$I$ ({i_norm_string}A)")
             ax.set_ylabel(rf"$t$ ({t_norm_string}s)")
-            ax.plot(i, t, ".")
+            ax.plot(i, t, ".", **kwargs)
         return ax
 
     def ax_v_t_tuples(
@@ -259,6 +286,8 @@ class IVPlot(IVEvaluation, BasePlot):
         plain: bool = False,
         fig_nr: int = 0,
         inverse: bool = False,
+        raw: bool = False,
+        **kwargs,
     ):
         if not ax:
             # Generate Figure
@@ -266,11 +295,19 @@ class IVPlot(IVEvaluation, BasePlot):
             fig, ax = plt.subplots(num=fig_nr)
 
         # get data
-        _, v, t = self.get_ivt(
-            index,
-            plain,
-            skip,
-        )
+        if raw:
+            _, v, t = self.get_ivt_raw(
+                index,
+                plain,
+                skip,
+            )
+        else:
+            _, v, t = self.get_ivt(
+                index,
+                plain,
+                skip,
+            )
+
         t -= np.nanmin(t)
 
         # get_norm
@@ -281,17 +318,17 @@ class IVPlot(IVEvaluation, BasePlot):
         t /= t_norm_value
 
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", right=True, top=True)
+        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
 
         if not inverse:
             ax.set_ylabel(rf"$V$ ({v_norm_string}V)")
             ax.set_xlabel(rf"$t$ ({t_norm_string}s)")
-            ax.plot(t, v, ".")
+            ax.plot(t, v, ".", **kwargs)
 
         else:
             ax.set_xlabel(rf"$V$ ({v_norm_string}V)")
             ax.set_ylabel(rf"$t$ ({t_norm_string}s)")
-            ax.plot(v, t, ".")
+            ax.plot(v, t, ".", **kwargs)
 
         return ax
 
@@ -303,6 +340,8 @@ class IVPlot(IVEvaluation, BasePlot):
         plain: bool = False,
         fig_nr: int = 0,
         inverse: bool = False,
+        raw: bool = False,
+        **kwargs,
     ):
         if not ax:
             # Generate Figure
@@ -310,11 +349,18 @@ class IVPlot(IVEvaluation, BasePlot):
             fig, ax = plt.subplots(num=fig_nr)
 
         # get data
-        i, v, _ = self.get_ivt(
-            index,
-            plain,
-            skip,
-        )
+        if raw:
+            i, v, _ = self.get_ivt_raw(
+                index,
+                plain,
+                skip,
+            )
+        else:
+            i, v, _ = self.get_ivt(
+                index,
+                plain,
+                skip,
+            )
 
         # get_norm
         i_norm_value, i_norm_string = get_norm(i)
@@ -325,17 +371,17 @@ class IVPlot(IVEvaluation, BasePlot):
 
         # set tick style
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", right=True, top=True)
+        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
 
         if not inverse:
             ax.set_ylabel(rf"$V$ ({v_norm_string}V)")
             ax.set_xlabel(rf"$I$ ({i_norm_string}A)")
-            ax.plot(i, v, ".")
+            ax.plot(i, v, ".", **kwargs)
 
         else:
             ax.set_xlabel(rf"$V$ ({v_norm_string}V)")
             ax.set_ylabel(rf"$I$ ({i_norm_string}A)")
-            ax.plot(v, i, ".")
+            ax.plot(v, i, ".", **kwargs)
 
         return ax
 
@@ -346,6 +392,7 @@ class IVPlot(IVEvaluation, BasePlot):
         plain: bool = False,
         fig_nr: int = 0,
         inverse: bool = False,
+        **kwargs,
     ):
         if not ax:
             # Generate Figure
@@ -361,17 +408,17 @@ class IVPlot(IVEvaluation, BasePlot):
 
         # set tick style
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", right=True, top=True)
+        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
 
         if not inverse:
             ax.set_xlabel(rf"$V$ ({v_norm_string}V)")
             ax.set_ylabel(rf"$I$ ({i_norm_string}A)")
-            ax.plot(v / v_norm_value, i / i_norm_value, ".")
+            ax.plot(v / v_norm_value, i / i_norm_value, ".", **kwargs)
 
         else:
             ax.set_xlabel(rf"$I$ ({i_norm_string}A)")
             ax.set_ylabel(rf"$V$ ({v_norm_string}V)")
-            ax.plot(i / i_norm_value, v / v_norm_value, ".")
+            ax.plot(i / i_norm_value, v / v_norm_value, ".", **kwargs)
         return ax
 
     def ax_v_i(
@@ -381,6 +428,7 @@ class IVPlot(IVEvaluation, BasePlot):
         plain: bool = False,
         fig_nr: int = 0,
         inverse: bool = False,
+        **kwargs,
     ):
         if not ax:
             # Generate Figure
@@ -396,17 +444,17 @@ class IVPlot(IVEvaluation, BasePlot):
 
         # set tick style
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", right=True, top=True)
+        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
 
         if not inverse:
             ax.set_xlabel(rf"$I$ ({i_norm_string}A)")
             ax.set_ylabel(rf"$V$ ({v_norm_string}V)")
-            ax.plot(i / i_norm_value, v / v_norm_value, ".")
+            ax.plot(i / i_norm_value, v / v_norm_value, ".", **kwargs)
 
         else:
             ax.set_xlabel(rf"$V$ ({v_norm_string}V)")
             ax.set_ylabel(rf"$I$ ({i_norm_string}A)")
-            ax.plot(v / v_norm_value, i / i_norm_value, ".")
+            ax.plot(v / v_norm_value, i / i_norm_value, ".", **kwargs)
         return ax
 
     def ax_didv_v(
@@ -431,7 +479,7 @@ class IVPlot(IVEvaluation, BasePlot):
 
         # set tick style
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", right=True, top=True)
+        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
 
         if not inverse:
             ax.set_xlabel(rf"$V$ ({v_norm_string}V)")
@@ -466,7 +514,7 @@ class IVPlot(IVEvaluation, BasePlot):
 
         # set tick style
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", right=True, top=True)
+        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
 
         if not inverse:
             ax.set_xlabel(rf"$I$ ({i_norm_string}A)")
@@ -504,7 +552,7 @@ class IVPlot(IVEvaluation, BasePlot):
 
         # set tick style
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", right=True, top=True)
+        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
 
         if not inverse:
             ax.set_xlabel(rf"$V$ ({v_norm_string}V)")
@@ -539,7 +587,7 @@ class IVPlot(IVEvaluation, BasePlot):
 
         # set tick style
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", right=True, top=True)
+        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
 
         if not inverse:
             ax.set_xlabel(rf"$I$ ({i_norm_string}A)")
@@ -649,7 +697,7 @@ class IVPlot(IVEvaluation, BasePlot):
 
         # Tweak ticks and style
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", right=True, top=True)
+        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
 
         return ax, cax
 
@@ -750,7 +798,7 @@ class IVPlot(IVEvaluation, BasePlot):
 
         # Tweak ticks and style
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", right=True, top=True)
+        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
 
         return ax, cax
 
@@ -827,7 +875,7 @@ class IVPlot(IVEvaluation, BasePlot):
 
         # Tweak ticks and style
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", right=True, top=True)
+        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
 
         return ax, cax
 
@@ -855,7 +903,7 @@ class IVPlot(IVEvaluation, BasePlot):
 
         # set tick style
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", right=True, top=True)
+        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
 
         if not inverse:
             ax.set_xlabel(
@@ -998,58 +1046,131 @@ class IVPlot(IVEvaluation, BasePlot):
 
         return fig, axs
 
-    def fig_ivs(
+    def fig_ididv_v(
         self,
-        index: int = 0,
-        plain: bool = False,
         fig_nr: int = 0,
         x_lim: tuple = (None, None),
         y_lim: tuple = (None, None),
+        z_lim: tuple = (None, None),
     ):
-        import numpy as np
-        import matplotlib.pyplot as plt
-        from matplotlib.animation import FuncAnimation
-
         plt.close(fig_nr)
-        fig, ax = plt.subplots(
+        fig, axs = plt.subplots(
             num=fig_nr,
-            nrows=1,
-            ncols=1,
+            nrows=2,
+            ncols=2,
             figsize=self.fig_size,
             dpi=self.dpi,
+            gridspec_kw={"height_ratios": [1, 3], "width_ratios": [1, 3]},
             constrained_layout=True,
         )
 
-        (line,) = ax.plot([], [], "r.")
+        axs[0, 0].remove()
 
-        i, v, t = self.get_ivt(index=0)
-        # get_norm
-        v_norm_value, v_norm_string = get_norm(v)
-        i_norm_value, i_norm_string = get_norm(i)
+        axs[1, 1] = self.ax_v_i_tuples(
+            ax=axs[1, 1],
+            index=0,
+            plain=True,
+            fig_nr=fig_nr,
+            inverse=True,
+            raw=True,
+            color="lightgrey",
+        )
 
-        # Initialization function: plot empty frame
-        def init():
-            line.set_data(v / v_norm_value, i / i_norm_value)
-            return (line,)
+        axs[1, 1] = self.ax_v_i_tuples(
+            ax=axs[1, 1], index=0, plain=True, fig_nr=fig_nr, inverse=True, color="grey"
+        )
+        axs[1, 1] = self.ax_i_v(
+            ax=axs[1, 1], index=0, plain=True, fig_nr=fig_nr, inverse=False, color="red"
+        )
+        axs[1, 1] = self.ax_v_i(
+            ax=axs[1, 1], index=0, plain=True, fig_nr=fig_nr, inverse=True, color="blue"
+        )
+        axs[0, 1] = self.ax_didv_v(
+            ax=axs[0, 1], index=0, plain=True, fig_nr=fig_nr, inverse=False
+        )
+        axs[1, 0] = self.ax_dvdi_i(
+            ax=axs[1, 0], index=0, plain=True, fig_nr=fig_nr, inverse=True
+        )
+
+        # modify
+        axs[1, 0].xaxis.set_inverted(True)
+
+        axs[0, 1].xaxis.set_label_position("top")
+        axs[0, 1].xaxis.tick_top()
+        axs[0, 1].tick_params(bottom=True)
+        axs[0, 1].yaxis.set_label_position("right")
+        axs[0, 1].yaxis.tick_right()
+        axs[0, 1].tick_params(left=True)
+
+        axs[1, 1].yaxis.set_label_position("right")
+        axs[1, 1].yaxis.tick_right()
+        axs[1, 1].tick_params(left=True)
 
         # set limits
-        ax.set_xlim(x_lim)
-        ax.set_ylim(y_lim)
+        axs[0, 1].set_xlim(x_lim)
+        axs[0, 1].set_ylim(y_lim)
+        axs[1, 1].set_ylim(z_lim)
 
-        def update(frame):
-            i, v, _ = self.get_ivt(index=frame)
-            line.set_data(v / v_norm_value, i / i_norm_value)
-            return (line,)
+        # axs[1, 1].sharex(axs[0, 1])
+        # axs[1, 1].sharey(axs[1, 0])
 
-        frames = np.arange(self.mapped["y_axis"].shape[0])
+        return fig, axs
 
-        ani = FuncAnimation(
-            fig, update, frames=frames, init_func=init, blit=False, interval=20
-        )
-        plt.show()
-        ani.save("sine_wave.mp4", fps=30)
+    # def fig_ivs(
+    #     self,
+    #     index: int = 0,
+    #     plain: bool = False,
+    #     fig_nr: int = 0,
+    #     x_lim: tuple = (None, None),
+    #     y_lim: tuple = (None, None),
+    # ):
+    #     import numpy as np
+    #     import matplotlib.pyplot as plt
+    #     from matplotlib.animation import FuncAnimation
 
-        return fig, ax
+    #     plt.close(fig_nr)
+    #     fig, ax = plt.subplots(
+    #         num=fig_nr,
+    #         nrows=1,
+    #         ncols=1,
+    #         figsize=self.fig_size,
+    #         dpi=self.dpi,
+    #         constrained_layout=True,
+    #     )
+
+    #     (line,) = ax.plot([], [], "r.")
+
+    #     i, v = self.get_i_v(index=0)
+
+    #     # get_norm
+    #     v_norm_value, v_norm_string = get_norm(v)
+    #     i_norm_value, i_norm_string = get_norm(i)
+
+    #     v /= v_norm_value
+
+    #     # Initialization function: plot empty frame
+    #     def init():
+    #         line.set_data(v, i / i_norm_value)
+    #         return (line,)
+
+    #     # set limits
+    #     ax.set_xlim(x_lim)
+    #     ax.set_ylim(y_lim)
+
+    #     def update(frame):
+    #         i, _ = self.get_i_v(index=frame)
+    #         line.set_data(v, i / i_norm_value)
+    #         return (line,)
+
+    #     frames = np.arange(self.mapped["y_axis"].shape[0])
+
+    #     ani = FuncAnimation(
+    #         fig, update, frames=frames, init_func=init, blit=False, interval=20
+    #     )
+    #     plt.show()
+    #     ani.save("sine_wave.mp4", fps=30)
+
+    #     return fig, ax
 
     # endregion
 
@@ -1089,9 +1210,9 @@ class IVPlot(IVEvaluation, BasePlot):
 
         i += 1
 
-        # get axs
-        for index, y_value in enumerate(self.mapped["y_axis"]):
-            print(index, y_value)
+        # # get axs
+        # for index, y_value in enumerate(self.mapped["y_axis"]):
+        #     print(index, y_value)
 
     # endregion
 
