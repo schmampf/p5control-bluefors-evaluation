@@ -50,64 +50,103 @@ import matplotlib.pyplot as plt
 from h5py import File, Group, Dataset
 
 # local
+import integration.files as Files
 from integration.files import DataCollection
 import utilities.logging as Logger
 
 # endregion
 
 
+# region Data Classes
+@dataclass
+class Range:
+    min: float = field(default_factory=float)
+    max: float = field(default_factory=float)
+    step: float = field(default_factory=float)
+
+
+@dataclass
+class Variable:
+    name: str = field(default_factory=str)
+    range: Range = field(default_factory=Range)
+    unit: str = field(default_factory=str)
+
+
+@dataclass
+class Constant:
+    name: str = field(default_factory=str)
+    value: float = field(default_factory=float)
+    unit: str = field(default_factory=str)
+
+
 @dataclass
 class MeasurementHeader:
-    name: str = field(default_factory=str)  # the measurement name
-    variable: str = field(default_factory=str)  # the variied parameter
-    constants: List[tuple] = field(
-        default_factory=lambda: []
-    )  # the constant parameters tuple (parameter, value, unit)
-    varied_range: tuple = field(
-        default_factory=lambda: (0.0, 0.0, 0.0)
-    )  # min, max, step
+    name: str = field(default_factory=str)
+    variable: Variable = field(default_factory=Variable)
+    constants: List[Constant] = field(default_factory=list)
+
+    @staticmethod
+    def unit_to_symbol(unit: str) -> str:
+        match unit:
+            case "V":
+                return "U"
+            case "A":
+                return "I"
+            case "Hz":
+                return "f"
+            case "T":
+                return "H"
+            case "K":
+                return "T"
+            case _:
+                return "None"
 
     def to_string(self) -> str:
-        return f"{self.name}: ({self.variable}) {self.varied_range} [{self.constants}]"
+        var_str = f"({self.variable.name},({self.variable.range.min},{self.variable.range.max},{self.variable.range.step}),{self.variable.unit})"
+        const_str = ",".join(
+            f"({c.name},{float(c.value):.2e},{c.unit})" for c in self.constants
+        )
+        return f"{self.name}: var={var_str} const=[{const_str}]"
 
     @staticmethod
     def from_string(header: str) -> "MeasurementHeader":
+        result = MeasurementHeader()
 
         parts = header.split(" ")
+        title = parts[0][0:-1]
+        var = parts[1][4:-1]
+        const = parts[2][7:-1]
 
-        if parts[0].startswith("vna"):
-            name = ""
-            variable = parts[0]
-        else:
-            name = parts[0]
-            variable = parts[1]
+        result.name = title
 
-        def map_const(
-            part: str,
-        ) -> (
-            tuple
-        ):  # map sth from "constDecl_+0.000Unit" to ("constDecl", +0.000, "Unit")
+        var = var.replace("(", "").replace(")", "").split(",")
+        result.variable = Variable(
+            name=var[0],
+            range=Range(
+                min=float(var[1]),
+                max=float(var[2]),
+                step=float(var[3]),
+            ),
+            unit=var[4],
+        )
 
-            subparts = part.split("_")
-            decl = subparts[0]
+        const = const.split("),(")
+        for i, part in enumerate(const):
+            const[i] = part.replace("(", "").replace(")", "")
 
-            val_arg = subparts[1]
+        res_const = []
+        for part in const:
+            subparts = part.split(",")
+            res_const.append(
+                Constant(
+                    name=subparts[0],
+                    value=float(subparts[1]),
+                    unit=subparts[2],
+                )
+            )
+        result.constants = res_const
 
-            value, unit = MeasurementHeader.parse_number(val_arg)
-
-            return (decl, value, unit)
-
-        constants = []
-
-        for part in parts[1:]:
-            if part.startswith("vna"):
-                part = part.split("_")
-                constants.append(map_const("vna_" + part[1]))
-                constants.append(map_const("vna_" + part[2]))
-            else:
-                constants.append(map_const(part))
-
-        return MeasurementHeader(name, variable, constants, ())
+        return result
 
     @staticmethod
     def parse_number(s: str) -> tuple:  # "Sign0.01Unit" -> (0.01, "Unit")
@@ -150,15 +189,15 @@ class Curve:
     norm: float = field(default_factory=float)
 
 
+# endregion Data Classes
+
+
 def setup(collection: DataCollection):
 
     collection.packets["params"] = Parameters()
 
     name = collection.data.name
     Logger.print(Logger.INFO, Logger.START, "GenEval.setup()")
-
-
-# class Measurements(Enum):
 
 
 def showAmplification(collection: DataCollection):
@@ -274,18 +313,7 @@ def loadMeasurements(
                 subgroup = measurement_group[measurement_name]
 
                 if isinstance(subgroup, Group):
-                    header = MeasurementHeader.from_string(measurement_name)
-
-                    params = []
-                    for subkey in subgroup.keys():
-                        params.append(MeasurementHeader.parse_number(subkey))
-
-                    min = np.min(list(map(lambda x: x[0], params)))
-                    max = np.max(list(map(lambda x: x[0], params)))
-                    step = params[1][0] - params[0][0]
-                    header.varied_range = (min, max, step)
-
-                    headers.append(header)
+                    headers.append(MeasurementHeader.from_string(measurement_name))
 
         collection.params.available_measurements = headers
 
@@ -305,3 +333,53 @@ def select_measurement(collection: DataCollection, header_index: int):
         Logger.DEBUG,
         msg=f"Selected: {collection.params.selected_measurement.to_string()}",
     )
+
+
+def loadCurveSet(collection: DataCollection, var_range_index: int):
+    """
+    Loads the specified measurement type and key from the HDF5 file.
+    """
+    data = collection.data
+    Logger.print(
+        Logger.INFO,
+        Logger.START,
+        f"GenEval.loadCurve(var_range_index={var_range_index})",
+    )
+
+    # check if file exists
+    file_name = Files.getfile_path(data)
+    if not os.path.exists(file_name):
+        Logger.print(Logger.ERROR, msg=f"Error: File does not exist: {file_name}")
+        return
+
+    # show selected file
+    Logger.print(Logger.DEBUG, msg=f"Opening file: {file_name}")
+
+    header = collection.params.selected_measurement
+
+    with File(file_name, "r") as data_file:
+        # get available measurements from file
+        measurement_group = data_file.get("measurement")
+
+        if measurement_group and isinstance(measurement_group, Group):
+            measurement = measurement_group.get(header.to_string())
+            if measurement and isinstance(measurement, Group):
+                range_value_key = (
+                    header.variable.range.min
+                    + var_range_index * header.variable.range.step
+                )
+                sign = "+" if range_value_key > 0 else "-"
+                key = f"u{MeasurementHeader.unit_to_symbol(header.variable.unit)}={sign}{abs(range_value_key):.2f}{header.variable.unit}"
+
+                ranged_measurement = measurement.get(key)
+                if ranged_measurement and isinstance(ranged_measurement, Group):
+                    offset_set = ranged_measurement.get("offset")
+                    sweep_set = ranged_measurement.get("sweep")
+                    if offset_set and isinstance(offset_set, Dataset):
+                        print()
+                    else:
+                        Logger.print(Logger.ERROR, msg="DataSets not found.")
+                        return
+                else:
+                    Logger.print(Logger.ERROR, msg="Ranged measurement not found.")
+                    return
