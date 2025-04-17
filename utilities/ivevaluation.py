@@ -46,6 +46,8 @@ from utilities.basefunctions import linear_fit
 from utilities.basefunctions import bin_y_over_x
 from utilities.basefunctions import bin_z_over_y
 from utilities.basefunctions import get_amplitude
+from utilities.basefunctions import make_even_spaced
+from utilities.basefunctions import downsample_signals_by_time
 
 logger = logging.getLogger(__name__)
 importlib.reload(sys.modules["utilities.baseevaluation"])
@@ -80,6 +82,7 @@ class IVEvaluation(BaseEvaluation):
             "y_axis": np.array([]),
             "voltage_offset_1": np.array([]),
             "voltage_offset_2": np.array([]),
+            "downsample_frequency": 3,
             "voltage_minimum": np.nan,
             "voltage_maximum": np.nan,
             "voltage_bins": np.nan,
@@ -96,13 +99,14 @@ class IVEvaluation(BaseEvaluation):
             "temperature_maximum": np.nan,
             "temperature_bins": np.nan,
             "temperature_axis": np.array([]),
-            "upsample_current": 0,
-            "upsample_voltage": 0,
+            "upsample_current": 137,
+            "upsample_voltage": 137,
             "upsample_amplitude": 0,
             "upsample_temperature": 0,
             "eva_current": True,
             "eva_voltage": True,
             "eva_temperature": True,
+            "eva_even_spaced": False,
         }
 
         self.index_trigger: int = 1
@@ -114,7 +118,7 @@ class IVEvaluation(BaseEvaluation):
         self.setV(2.0e-3, voltage_bins=100)
         self.setI(1.0e-6, current_bins=100)
         self.setA(0, 1, 500)
-        self.setT(0, 2, 500)
+        self.setT(0, 1.5, 500)
 
         logger.info("(%s) ... IVEvaluation initialized.", self._iv_eva_name)
 
@@ -138,7 +142,9 @@ class IVEvaluation(BaseEvaluation):
         if not len_y:
             len_y = np.shape(self.y_unsorted)[0]
         return {
+            "iv_tuples_raw": [None] * len_y,
             "iv_tuples": [None] * len_y,
+            "downsample_frequency": np.full(len_y, np.nan, dtype="float64"),
             "temperature": np.full(len_y, np.nan, dtype="float64"),
             "time_start": np.full(len_y, np.nan, dtype="float64"),
             "time_stop": np.full(len_y, np.nan, dtype="float64"),
@@ -335,7 +341,7 @@ class IVEvaluation(BaseEvaluation):
     # endregion
 
     # region internal functions
-    def get_current_voltage(self, specific_key: str):
+    def get_current_voltage(self, specific_key: str = ""):
         """
         Retrieves and processes current and voltage data from an HDF5 file.
 
@@ -369,21 +375,32 @@ class IVEvaluation(BaseEvaluation):
 
         with File(file_name, "r") as data_file:
             # Retrieve Offset Dataset
-            measurement_data_offset = np.array(
-                data_file.get(
-                    f"measurement/{self.measurement_key}/{specific_key}/offset/adwin"
+            if specific_key != 0:
+                measurement_data_offset = np.array(
+                    data_file.get(
+                        f"measurement/{self.measurement_key}/{specific_key}/offset/adwin"
+                    )
                 )
-            )
+            else:
+                measurement_data_offset = np.array(
+                    data_file.get(f"measurement/{self.measurement_key}/offset/adwin")
+                )
+
             # Calculate Offsets
             v1_off = np.nanmean(np.array(measurement_data_offset["V1"]))
             v2_off = np.nanmean(np.array(measurement_data_offset["V2"]))
 
             # Retrieve Sweep Dataset
-            measurement_data_sweep = np.array(
-                data_file.get(
-                    f"measurement/{self.measurement_key}/{specific_key}/sweep/adwin"
+            if specific_key != 0:
+                measurement_data_sweep = np.array(
+                    data_file.get(
+                        f"measurement/{self.measurement_key}/{specific_key}/sweep/adwin"
+                    )
                 )
-            )
+            else:
+                measurement_data_sweep = np.array(
+                    data_file.get(f"measurement/{self.measurement_key}/sweep/adwin")
+                )
 
             # Get Voltage Readings of Adwin
             trigger = np.array(measurement_data_sweep["trigger"], dtype="int")
@@ -524,19 +541,49 @@ class IVEvaluation(BaseEvaluation):
         dictionary["time_stop"][index] = time_filtered[-1]
 
         # Store raw IV data tuples
-        dictionary["iv_tuples"][index] = [i_raw_filtered, v_raw_filtered, time_filtered]
+        dictionary["iv_tuples_raw"][index] = [
+            i_raw_filtered,
+            v_raw_filtered,
+            time_filtered,
+        ]
+
+        # Downsample signals
+        (
+            i_raw_downsampled,
+            v_raw_downsampled,
+            t_raw_downsampled,
+            downsample_counts,
+            downsample_frequency,
+        ) = downsample_signals_by_time(
+            current=i_raw_filtered,
+            voltage=v_raw_filtered,
+            time=time_filtered,
+            target_frequency=self.downsample_frequency,
+            savety_factor=3,
+            prefer_prime=True,
+            power_threshold=0.95,
+        )
+
+        # Store raw IV data tuples
+        dictionary["iv_tuples"][index] = [
+            i_raw_downsampled,
+            v_raw_downsampled,
+            t_raw_downsampled,
+            downsample_counts,
+        ]
+        dictionary["downsample_frequency"][index] = downsample_frequency
 
         # Bin current data if enabled
         if self.eva_current:
             dictionary["current"][index, :], _ = bin_y_over_x(
-                v_raw_filtered,
-                i_raw_filtered,
+                v_raw_downsampled,
+                i_raw_downsampled,
                 self.voltage_axis,
                 upsample=self.upsample_current,
             )
             dictionary["time_current"][index, :], _ = bin_y_over_x(
-                v_raw_filtered,
-                time_filtered,
+                v_raw_downsampled,
+                t_raw_downsampled,
                 self.voltage_axis,
                 upsample=self.upsample_current,
             )
@@ -544,14 +591,14 @@ class IVEvaluation(BaseEvaluation):
         # Bin voltage data if enabled
         if self.eva_voltage:
             dictionary["voltage"][index, :], _ = bin_y_over_x(
-                i_raw_filtered,
-                v_raw_filtered,
+                i_raw_downsampled,
+                v_raw_downsampled,
                 self.current_axis,
                 upsample=self.upsample_voltage,
             )
             dictionary["time_voltage"][index, :], _ = bin_y_over_x(
-                i_raw_filtered,
-                time_filtered,
+                i_raw_downsampled,
+                t_raw_downsampled,
                 self.current_axis,
                 upsample=self.upsample_voltage,
             )
@@ -786,6 +833,47 @@ class IVEvaluation(BaseEvaluation):
                 dictionary["temperature_voltage"], axis=1
             )
 
+    def getMapsEvenSpaced(self, already_evaluated: list[dict]):
+        logger.info("(%s) getMapsAmplitude()", self._iv_eva_name)
+        evaluated = []
+        temp_yaxis = np.copy(self.y_axis)
+        self.y_axis = make_even_spaced(self.y_axis)
+        for index_to_evaluate, to_evaluate in enumerate(already_evaluated):
+            evaluated.append(self.get_empty_dictionary())
+            for string in [
+                "current",
+                "time_current",
+                "temperature_current",
+                "voltage",
+                "time_voltage",
+                "temperature_voltage",
+                "differential_conductance",
+                "differential_resistance",
+            ]:
+                (
+                    evaluated[index_to_evaluate][string],
+                    evaluated[index_to_evaluate][f"{string}_counter"],
+                ) = bin_z_over_y(
+                    temp_yaxis,
+                    to_evaluate[string],
+                    self.y_axis,
+                )
+            for string in [
+                "temperature",
+                "time_start",
+                "time_stop",
+            ]:
+
+                (
+                    evaluated[index_to_evaluate][string],
+                    evaluated[index_to_evaluate][f"{string}_counter"],
+                ) = bin_y_over_x(
+                    temp_yaxis,
+                    to_evaluate[string],
+                    self.y_axis,
+                )
+        return tuple(evaluated)
+
     # endregion
 
     # region main functions
@@ -911,6 +999,9 @@ class IVEvaluation(BaseEvaluation):
                     self.y_0_key,
                     trigger_index,
                 )
+                self.downsample_frequency = float(
+                    evaluated[i_trigger_index]["plain"]["downsample_frequency"]
+                )
 
             # Iterate over the keys for each measurement
             for index, key in enumerate(tqdm(self.specific_keys)):
@@ -959,7 +1050,10 @@ class IVEvaluation(BaseEvaluation):
             # Calculate differential conductance and resistance
             self.get_differentials(evaluated[i_trigger_index])
 
-        return tuple(evaluated)
+            if self.eva_even_spaced:
+                return self.getMapsEvenSpaced(evaluated)
+            else:
+                return tuple(evaluated)
 
     def getMapsAmplitude(self, already_evaluated: list[dict]):
         logger.info("(%s) getMapsAmplitude()", self._iv_eva_name)
@@ -1077,6 +1171,17 @@ class IVEvaluation(BaseEvaluation):
         logger.debug("(%s) eva_temperature = %s", self._iv_eva_name, eva_temperature)
 
     @property
+    def eva_even_spaced(self):
+        """Get the value of eva_even_spaced."""
+        return self.mapped["eva_even_spaced"]
+
+    @eva_even_spaced.setter
+    def eva_even_spaced(self, eva_even_spaced):
+        """Set the value of eva_even_spaced."""
+        self.mapped["eva_even_spaced"] = eva_even_spaced
+        logger.debug("(%s) eva_even_spaced = %s", self._iv_eva_name, eva_even_spaced)
+
+    @property
     def voltage_offset_1(self):
         """Get the value of voltage_offset_1."""
         return self.mapped["voltage_offset_1"]
@@ -1105,6 +1210,16 @@ class IVEvaluation(BaseEvaluation):
     def y_axis(self, y_axis):
         """Set the value of y_axis."""
         self.mapped["y_axis"] = y_axis
+
+    @property
+    def downsample_frequency(self):
+        """Get the value of downsample_frequency."""
+        return self.mapped["downsample_frequency"]
+
+    @downsample_frequency.setter
+    def downsample_frequency(self, downsample_frequency):
+        """Set the value of downsample_frequency."""
+        self.mapped["downsample_frequency"] = downsample_frequency
 
     @property
     def voltage_minimum(self):
