@@ -60,6 +60,10 @@ class BasePlot(BaseClass):
         super().__init__()
         self._base_plot_name = name
 
+        self.save_as_png: bool = True
+        self.save_as_fig: bool = True
+        self.save_as_pdf: bool = False
+
         logger.info("(%s) ... BasePlot initialized.", self._base_plot_name)
 
     def saveFigure(
@@ -67,9 +71,6 @@ class BasePlot(BaseClass):
         figure: matplotlib.figure.Figure,
         sub_title: str = "",
         sub_folder: str = "",
-        save_as_png: bool = True,
-        save_as_fig: bool = True,
-        save_as_pdf: bool = False,
     ):
         """
         Save a matplotlib figure to a specified directory.
@@ -111,14 +112,14 @@ class BasePlot(BaseClass):
             name = folder
 
         # Save the figure in different formats based on user preferences
-        if save_as_png:
+        if self.save_as_png:
             figure.savefig(f"{name}.png", dpi=600)
 
-        if save_as_fig:
+        if self.save_as_fig:
             with open(f"{name}.fig.pickle", "wb") as file:
                 pickle.dump(figure, file)
 
-        if save_as_pdf:
+        if self.save_as_pdf:
             figure.savefig(f"{name}.pdf", dpi=600)
 
     def loadFigure(

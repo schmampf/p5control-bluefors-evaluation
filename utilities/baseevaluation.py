@@ -221,7 +221,6 @@ class BaseEvaluation(BaseClass):
 
     def setKeys(
         self,
-        parameters: list = [],
         index_0: int = 0,
         index_1=None,
         norm: float = 0,
@@ -248,29 +247,24 @@ class BaseEvaluation(BaseClass):
         to_pop : str
             key to pop
         """
+        logger.info(
+            "(%s) setKeys(%s, %s, %s, %s)",
+            self._base_eva_name,
+            index_0,
+            index_1,
+            norm,
+            to_pop,
+        )
         if self.measurement_key == "":
             logger.warning("(%s) Do setMeasurement() first.", self._base_eva_name)
             return
 
-        if not parameters:
-            parameters = self.possible_measurement_keys[self.measurement_key]
-
-        logger.info("(%s) setKeys(%s)", self._base_eva_name, parameters)
-
-        try:
-            index_0 = index_0 or parameters[0]
-            index_1 = index_1 or parameters[1]
-            norm = norm or parameters[2]
-            to_pop = to_pop or parameters[3]
-        except IndexError:
-            logger.warning("(%s) List of Parameter is incomplete.", self._base_eva_name)
-            return
-
-        if to_pop in self.specific_keys:
-            self.specific_keys.remove(to_pop)
-            self.y_0_key = to_pop
-        else:
-            logger.warning("(%s) Key to pop is not found.", self._base_eva_name)
+        if to_pop != "":
+            try:
+                self.specific_keys.remove(to_pop)
+                self.y_0_key = to_pop
+            except KeyError:
+                logger.warning("(%s) Key to pop is not found.", self._base_eva_name)
 
         y = []
         for key in self.specific_keys:
