@@ -42,7 +42,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 # 3rd party
 import numpy as np
@@ -98,6 +98,8 @@ class MeasurementHeader:
                 return "H"
             case "K":
                 return "T"
+            case "W":
+                return "P"
             case _:
                 return "None"
 
@@ -125,44 +127,62 @@ class MeasurementHeader:
             range=Range(
                 min=float(var[1]),
                 max=float(var[2]),
-                step=float(var[3]),
+                step=float(var[3]) if len(var) == 5 else 0.0,
             ),
-            unit=var[4],
+            unit=var[4] if len(var) == 5 else var[3],
         )
 
         const = const.split("),(")
         for i, part in enumerate(const):
             const[i] = part.replace("(", "").replace(")", "")
 
-        res_const = []
-        for part in const:
-            subparts = part.split(",")
-            res_const.append(
-                Constant(
-                    name=subparts[0],
-                    value=float(subparts[1]),
-                    unit=subparts[2],
+        if not const == [""]:
+            res_const = []
+            for part in const:
+                subparts = part.split(",")
+                res_const.append(
+                    Constant(
+                        name=subparts[0],
+                        value=float(subparts[1]),
+                        unit=subparts[2],
+                    )
                 )
-            )
-        result.constants = res_const
+            result.constants = res_const
 
         return result
 
     @staticmethod
     def parse_number(s: str) -> tuple:  # "Sign0.01Unit" -> (0.01, "Unit")
-        sign = -1 if s[0] == "-" else 1
 
         def isDigit(s: str) -> bool:
             return s.isdigit() or s == "."
 
-        s_str = "".join(filter(isDigit, s[1:]))
-        value = float(s_str) * sign if not s_str == "" else np.nan
-        if s_str == "":
-            offset = 3
-        if not s_str == "":
-            offset = 1 + len(s_str)
+        def isNumber(s: str) -> bool:
+            return isDigit(s) or s in ["+", "-"]
 
-        unit = s[offset:]
+        num_start = 0
+        num_end = 0
+        # walk from left to right until a number char is found
+        for i, c in enumerate(s):
+            if isNumber(c):
+                num_start = i
+                break
+        # walk from right to left until a number char is found
+        for i, c in enumerate(s[::-1]):
+            if isNumber(c):
+                num_end = i
+                break
+
+        num_str = s[num_start : len(s) - num_end]
+
+        signed = True if num_str[0] in ["+", "-"] else False
+        sign = -1 if num_str[0] == "-" else 1
+        num_str = num_str[1:] if signed else num_str
+
+        value = float(num_str) * sign if not num_str == "" else np.nan
+
+        unit = s[len(s) - num_end :]
+
         return value, unit
 
 
@@ -276,6 +296,11 @@ def showLoadedMeasurements(collection: DataCollection):
     Logger.print(Logger.INFO, Logger.START, "GenEval.showLoadedMeasurements()")
 
     num_headers = len(collection.params.available_measurements)
+
+    if num_headers == 0:
+        Logger.print(Logger.ERROR, msg="No measurements loaded.")
+        return
+
     num_digits = len(str(num_headers))
     for i, header in enumerate(collection.params.available_measurements):
         Logger.print(
@@ -286,6 +311,7 @@ def showLoadedMeasurements(collection: DataCollection):
 
 def loadMeasurements(
     collection: DataCollection,
+    findRange: bool = False,
 ):
     """
     Loads the specified measurement type and key from the HDF5 file.
@@ -310,10 +336,54 @@ def loadMeasurements(
 
         if measurement_group and isinstance(measurement_group, Group):
             for measurement_name in measurement_group.keys():
-                subgroup = measurement_group[measurement_name]
+                try:
+                    header = MeasurementHeader.from_string(measurement_name)
 
-                if isinstance(subgroup, Group):
-                    headers.append(MeasurementHeader.from_string(measurement_name))
+                    if findRange:
+                        Logger.print(
+                            Logger.INFO,
+                            msg=f"Attempting to parse measurement range for: {measurement_name}",
+                        )
+                        Logger.print(
+                            Logger.INFO,
+                            msg=f"  The Result may be inaccurate.",
+                        )
+                        variations = measurement_group.get(measurement_name)
+                        if isinstance(variations, Group):
+                            labels = variations.keys()
+                            nums = []
+                            for label in labels:
+                                try:
+                                    num = MeasurementHeader.parse_number(label)
+                                    nums.append(num)
+                                except Exception as e:
+                                    Logger.print(
+                                        Logger.DEBUG,
+                                        msg=f"Measurement variation format unknown: {label} - {e}",
+                                    )
+                                    continue
+
+                            nums = sorted(nums, key=lambda x: x[0])
+
+                            min = nums[0][0]
+                            max = nums[-1][0]
+                            step = nums[1][0] - nums[0][0]
+
+                            declared_decimals = len(str(nums[0][0]).split(".")[1])
+                            step = round(step, declared_decimals)
+
+                            header.variable.range = Range(
+                                min=min,
+                                max=max,
+                                step=step,
+                            )
+                    headers.append(header)
+                except Exception as e:
+                    Logger.print(
+                        Logger.ERROR,
+                        msg=f"Measurement header format unknown: {measurement_name} - {e}",
+                    )
+                    continue
 
         collection.params.available_measurements = headers
 
@@ -324,6 +394,19 @@ def select_measurement(collection: DataCollection, header_index: int):
         Logger.START,
         msg=f"GenEval.select_measurement(index={header_index})",
     )
+
+    num_available_measurements = len(collection.params.available_measurements)
+
+    if num_available_measurements == 0:
+        Logger.print(Logger.ERROR, msg="No measurements loaded.")
+        return
+
+    if num_available_measurements < header_index:
+        Logger.print(
+            Logger.ERROR,
+            msg=f"Error: Index out of range. Available measurements: {num_available_measurements}",
+        )
+        return
 
     collection.params.selected_measurement = collection.params.available_measurements[
         header_index - 1
@@ -370,7 +453,6 @@ def loadCurveSet(collection: DataCollection, var_range_index: int):
                 )
                 sign = "+" if range_value_key > 0 else "-"
                 key = f"u{MeasurementHeader.unit_to_symbol(header.variable.unit)}={sign}{abs(range_value_key):.2f}{header.variable.unit}"
-
                 ranged_measurement = measurement.get(key)
                 if ranged_measurement and isinstance(ranged_measurement, Group):
                     offset_set = ranged_measurement.get("offset")
