@@ -41,7 +41,7 @@ from qtpy.QtWidgets import QApplication
 from qtpy.QtGui import QIcon
 
 # local
-from utilities.hdf5view.mainwindow import MainWindow
+from hdf5view.mainwindow import MainWindow
 import utilities.logging as Logger
 
 # endregion
