@@ -26,114 +26,64 @@ Author: Oliver Irtenkauf
 Date: 2025-04-01
 """
 
-# region imports 
-# std lib
 import os
 import sys
-import platform
-from enum import Enum, auto
-from typing import Dict, Any
-
-# 3rd party
 import pickle
 import logging
+import platform
 from importlib import reload
 from qtpy.QtWidgets import QApplication
 from qtpy.QtGui import QIcon
+from hdf5view.mainwindow import MainWindow
 
-# local
-from utilities.hdf5view.mainwindow import MainWindow
-# endregion
-
-# region Configure logging
+# Configure logging
 reload(logging)
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
-# endregion
 
-class BaseFields(Enum):
-    """A collection of valid BaseFields for the BaseClass."""
-    title               = auto()
-    sub_folder          = auto()
-    data_folder         = auto()
-    figure_folder       = auto()
-    ignore_while_saving = auto()
-    file_directory      = auto()
-    file_folder         = auto()
-    file_name           = auto()
 
 class BaseClass:
     """
     BaseClass provides methods to save, load, and display its attributes.
     It also integrates HDF5 file visualization through a Qt-based GUI.
     """
-    
-    name: str
-    base: Dict[BaseFields, Any] = {}
-    
-    # region overload setter and getters
-    def __setattr__(self, name, value):
-        key = BaseFields[name] if name in BaseFields._member_names_ else None
-        if key:
-            self.base[key] = value
-        else:
-            super().__setattr__(name, value)
-    
-    def __getattr__(self, name):
-        key = BaseFields[name] if name in BaseFields._member_names_ else None
-        if key:
-            return self.base[key]
-        else:
-            return super().__getattribute__(name)
-    # endregion
-    
-    def __init__(self, 
-        name="base",
-        root_dir=None,
-    ):
+
+    def __init__(self, name="base"):
         """
         Initialize the BaseClass instance with default storage settings.
 
         Args:
             name (str): The name of the instance.
         """
-        self.name = name
-        
-        if not root_dir:
-            logger.warning("(%s) The project root directory not set. Assuming defaults.", self.name)
-            
-            username = os.getlogin()
-            
-            match (platform.system()):
-                case "Darwin":
-                    file_directory = f"/Volumes/{username}/measurement data/"
-                case "Linux":
-                    file_directory = f"/home/{username}/Documents/measurement_data/"
+        self._base_name = name
+
+        # Determine file directory based on OS
+        if platform.system() == "Darwin":
+            file_directory = "/Volumes/speedyboy/measurement data/"
+        elif platform.system() == "Linux":
+            file_directory = "/home/oliver/Documents/measurement_data/"
         else:
-            if not root_dir.endswith("/"):
-                root_dir += "/"
-            
-            file_directory = root_dir
-            logger.info("(%s) The project root directory set to %s.", self.name, file_directory)                
+            file_directory = ""
+            logger.warning("(%s) needs a valid file directory.", self._base_name)
 
         # Define base configuration for file management
         self.base = {
-            BaseFields.title:               "",
-            BaseFields.sub_folder:          "",
-            BaseFields.data_folder:         "data/",
-            BaseFields.figure_folder:       "figures/",
-            BaseFields.ignore_while_saving: ["name", "_base_plot_name"],
-            BaseFields.file_directory:      file_directory,
-            BaseFields.file_folder:         "",
-            BaseFields.file_name:           "",
+            "title": "",
+            "sub_folder": "",
+            "data_folder": "data/",
+            "figure_folder": "figures/",
+            "ignore_while_saving": ["_base_name", "_base_plot_name"],
+            "file_directory": file_directory,
+            "file_folder": "",
+            "file_name": "",
         }
-        logger.info("(%s) ... BaseClass initialized.", self.name)
+        logger.info("(%s) ... BaseClass initialized.", self._base_name)
 
     def showFile(self):
         """
         Open the HDF5 file using a Qt-based GUI viewer.
         """
-        logger.info("(%s) showFile()", self.name)
+        logger.info("(%s) showFile()", self._base_name)
         file_name = os.path.join(
             self.file_directory,
             self.file_folder,
@@ -147,7 +97,7 @@ class BaseClass:
         window = MainWindow(app)
         window.show()
         window.open_file(file_name)
-        app.exec()
+        app.exec_()
 
     def saveData(self, title: str = ""):
         """
@@ -156,7 +106,7 @@ class BaseClass:
         Args:
             title (str, optional): The filename for the saved data. Defaults to base title.
         """
-        logger.info("(%s) saveData()", self.name)
+        logger.info("(%s) saveData()", self._base_name)
         if not title:
             title = f"{self.title}.pickle"
 
@@ -182,7 +132,7 @@ class BaseClass:
         Args:
             title (str, optional): The filename to load. Defaults to base title.
         """
-        logger.info("(%s) loadData()", self.name)
+        logger.info("(%s) loadData()", self._base_name)
         if not title:
             title = f"{self.title}.pickle"
 
@@ -199,7 +149,97 @@ class BaseClass:
         Returns:
             dict: The stored attributes.
         """
-        logger.info("(%s) showData()", self.name)
+        logger.info("(%s) showData()", self._base_name)
         return {
             k: v for k, v in self.__dict__.items() if k not in self.ignore_while_saving
         }
+
+    @property
+    def title(self):
+        """get title"""
+        return self.base["title"]
+
+    @title.setter
+    def title(self, title: str):
+        """set title"""
+        self.base["title"] = title
+        logger.debug("(%s) title = %s", self._base_name, title)
+
+    @property
+    def sub_folder(self):
+        """get sub_folder"""
+        return self.base["sub_folder"]
+
+    @sub_folder.setter
+    def sub_folder(self, sub_folder: str):
+        """set sub_folder"""
+        self.base["sub_folder"] = sub_folder
+        logger.debug("(%s) sub_folder = %s", self._base_name, sub_folder)
+
+    @property
+    def data_folder(self):
+        """get data_folder"""
+        return self.base["data_folder"]
+
+    @data_folder.setter
+    def data_folder(self, data_folder: str):
+        """set data_folder"""
+        self.base["data_folder"] = data_folder
+        logger.debug("(%s) data_folder = %s", self._base_name, data_folder)
+
+    @property
+    def figure_folder(self):
+        """get figure_folder"""
+        return self.base["figure_folder"]
+
+    @figure_folder.setter
+    def figure_folder(self, figure_folder: str):
+        """set figure_folder"""
+        self.base["figure_folder"] = figure_folder
+        logger.debug("(%s) figure_folder = %s", self._base_name, figure_folder)
+
+    @property
+    def ignore_while_saving(self):
+        """get ignore_while_saving"""
+        return self.base["ignore_while_saving"]
+
+    @ignore_while_saving.setter
+    def ignore_while_saving(self, ignore_while_saving: str):
+        """set ignore_while_saving"""
+        self.base["ignore_while_saving"] = ignore_while_saving
+        logger.debug(
+            "(%s) ignore_while_saving = %s", self._base_name, ignore_while_saving
+        )
+
+    @property
+    def file_directory(self):
+        """get file_directory"""
+        return self.base["file_directory"]
+
+    @file_directory.setter
+    def file_directory(self, file_directory: str):
+        """set file_directory"""
+        self.base["file_directory"] = file_directory
+        logger.debug("(%s) file_directory = %s", self._base_name, file_directory)
+
+    @property
+    def file_folder(self):
+        """get file_folder"""
+        return self.base["file_folder"]
+
+    @file_folder.setter
+    def file_folder(self, file_folder: str):
+        """set file_folder"""
+        self.base["file_folder"] = file_folder
+        logger.debug("(%s) file_folder = %s", self._base_name, file_folder)
+
+    @property
+    def file_name(self):
+        """get file_name"""
+        return self.base["file_name"]
+
+    @file_name.setter
+    def file_name(self, file_name: str):
+        """set file_name"""
+        self.base["file_name"] = file_name
+        logger.debug("(%s) file_name = %s", self._base_name, file_name)

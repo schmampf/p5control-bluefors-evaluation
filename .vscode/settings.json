@@ -10,5 +10,20 @@
         "--method-naming-style=camelCase",
         "--class-naming-style=PascalCase",
         "-j 0",
+    ],
+    "cSpell.words": [
+        "adwin",
+        "Downsample",
+        "Downsampled",
+        "downsampling",
+        "errstate",
+        "nanmax",
+        "nanmean",
+        "nans",
+        "nanstd",
+        "ndarray",
+        "Nyquist",
+        "polyfit",
+        "Upsampling"
     ]
 }
