@@ -34,7 +34,7 @@ import platform
 from importlib import reload
 from qtpy.QtWidgets import QApplication
 from qtpy.QtGui import QIcon
-from utilities.hdf5view.mainwindow import MainWindow
+from hdf5view.mainwindow import MainWindow
 
 # Configure logging
 reload(logging)
