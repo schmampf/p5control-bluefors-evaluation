@@ -154,6 +154,8 @@ class MeasurementHeader:
     @staticmethod
     def parse_number(s: str) -> tuple:  # "Sign0.01Unit" -> (0.01, "Unit")
 
+        s = s.replace(" ", "")
+
         def isDigit(s: str) -> bool:
             return s.isdigit() or s == "."
 
@@ -200,13 +202,6 @@ class Parameters:
         if name == "volt_amp" and not np.array_equal(value, np.array([0.0, 0.0])):
             Logger.print(Logger.DEBUG, msg=f"Params.{name} = {value}")
         object.__setattr__(self, name, value)
-
-
-@dataclass
-class Curve:
-    headers: List[str] = field(default_factory=list)
-    data: Dict[str, Any] = field(default_factory=dict)
-    norm: float = field(default_factory=float)
 
 
 # endregion Data Classes
@@ -285,8 +280,11 @@ def showFileMeasurements(collection: DataCollection):
     Logger.print(Logger.DEBUG, msg=f"Opening file: {file_name}")
 
     with File(file_name, "r") as data_file:
-        keys = list(data_file.keys())
-        Logger.print(Logger.INFO, msg=f"Available measurements: {keys}")
+        group = data_file.get("measurement")
+        if group and isinstance(group, Group):
+            keys = list(group.keys())
+            for key in keys:
+                Logger.print(Logger.INFO, msg=f"Available measurements: {key}")
 
 
 def showLoadedMeasurements(collection: DataCollection):
