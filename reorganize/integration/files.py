@@ -222,12 +222,24 @@ def open_file_group(
 
     file = h5py.File(file_name, "r")
 
-    group = file.get("/measurement/var=(magnetic_fields,(-1e-01,1e-01),T) const=[]")
+    group = file.get(dir)
     if isinstance(group, h5py.Group):
         return file, group
     else:
         Logger.print(Logger.ERROR, msg=f"Error: Group not found: {dir}")
         return (None, None)
+
+
+def ensure_group(obj):
+    if isinstance(obj, h5py.Group):
+        return obj
+    raise TypeError(f"Expected an h5py.Group, but got {type(obj)}")
+
+
+def ensure_file(obj):
+    if isinstance(obj, h5py.File):
+        return obj
+    raise TypeError(f"Expected an h5py.File, but got {type(obj)}")
 
 
 def setup(collection: DataCollection, name: str = "", root_dir: str = ""):

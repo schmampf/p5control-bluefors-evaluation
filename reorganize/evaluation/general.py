@@ -494,14 +494,6 @@ def select_CurveSet(collection: DataCollection, var_range_index: int):
         )
         collection.params.selected_dataset = selected_key
 
-        # selected_group = group.get(selected_key)
-        # if selected_group and isinstance(selected_group, Group):
-        #     offset_set = selected_group.get("offset")
-        #     sweep_set = selected_group.get("sweep")
-
-        #     print(f"Offset: {offset_set}")
-        #     print(f"Sweep: {sweep_set}")
-
     if file:
         file.close()
 
