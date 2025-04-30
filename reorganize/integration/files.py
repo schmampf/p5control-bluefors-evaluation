@@ -33,12 +33,13 @@ import os
 import sys
 import platform
 from dataclasses import dataclass, field
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 
 # 3rd party
 import pickle
 from qtpy.QtWidgets import QApplication
 from qtpy.QtGui import QIcon
+import h5py
 
 # local
 from hdf5view.mainwindow import MainWindow
@@ -200,6 +201,33 @@ def getfile_path(data: FileData) -> str:
         data.file_folder,
         data.file_name,
     )
+
+
+def open_file_group(
+    data: FileData, dir: str
+) -> Tuple[h5py.File | None, h5py.Group | None]:
+    Logger.print(
+        Logger.DEBUG,
+        msg=f"Files.open_file(data, dir={dir})",
+    )
+
+    # check if file exists
+    file_name = getfile_path(data)
+    if not os.path.exists(file_name):
+        Logger.print(Logger.ERROR, msg=f"Error: File does not exist: {file_name}")
+        return (None, None)
+
+    # show selected file
+    Logger.print(Logger.DEBUG, msg=f"Opening file: {file_name}")
+
+    file = h5py.File(file_name, "r")
+
+    group = file.get("/measurement/var=(magnetic_fields,(-1e-01,1e-01),T) const=[]")
+    if isinstance(group, h5py.Group):
+        return file, group
+    else:
+        Logger.print(Logger.ERROR, msg=f"Error: Group not found: {dir}")
+        return (None, None)
 
 
 def setup(collection: DataCollection, name: str = "", root_dir: str = ""):

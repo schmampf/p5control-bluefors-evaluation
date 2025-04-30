@@ -53,6 +53,7 @@ from h5py import File, Group, Dataset
 import integration.files as Files
 from integration.files import DataCollection
 import utilities.logging as Logger
+from utilities.name_gen import format_scientific as fmt
 
 # endregion
 
@@ -104,22 +105,28 @@ class MeasurementHeader:
                 return "None"
 
     def to_string(self) -> str:
-        var_str = f"({self.variable.name},({self.variable.range.min},{self.variable.range.max},{self.variable.range.step}),{self.variable.unit})"
+
+        title = self.name + ": " if not self.name == "" else ""
+        var_str = f"({self.variable.name},({fmt(self.variable.range.min)},{fmt(self.variable.range.max)}{","+fmt(self.variable.range.step) if not self.variable.range.step == 0.0 else ""}),{self.variable.unit})"
         const_str = ",".join(
-            f"({c.name},{float(c.value):.2e},{c.unit})" for c in self.constants
+            f"({c.name},{fmt(c.value)},{c.unit})" for c in self.constants
         )
-        return f"{self.name}: var={var_str} const=[{const_str}]"
+        return f"{title}var={var_str} const=[{const_str}]"
 
     @staticmethod
     def from_string(header: str) -> "MeasurementHeader":
         result = MeasurementHeader()
 
         parts = header.split(" ")
-        title = parts[0][0:-1]
-        var = parts[1][4:-1]
-        const = parts[2][7:-1]
-
-        result.name = title
+        nextindex = 1
+        if ":" in parts[0]:
+            title = parts[0][0:-1]
+            result.name = title
+        else:
+            # if no title is given, skip title parsing
+            nextindex = 0
+        var = parts[nextindex][4:-1]
+        const = parts[nextindex + 1][7:-1]
 
         var = var.replace("(", "").replace(")", "").split(",")
         result.variable = Variable(
@@ -196,7 +203,10 @@ class Parameters:
     selected_measurement: MeasurementHeader = field(
         default_factory=lambda: MeasurementHeader()
     )
+    selected_dataset: str = field(default_factory=lambda: "")
+
     available_measurements: List[MeasurementHeader] = field(default_factory=lambda: [])
+    available_measurement_entries: int = field(default_factory=lambda: -1)
 
     def __setattr__(self, name: str, value: Any):
         if name == "volt_amp" and not np.array_equal(value, np.array([0.0, 0.0])):
@@ -406,60 +416,99 @@ def select_measurement(collection: DataCollection, header_index: int):
         )
         return
 
-    collection.params.selected_measurement = collection.params.available_measurements[
-        header_index - 1
-    ]
+    header = collection.params.available_measurements[header_index - 1]
+    collection.params.selected_measurement = header
+    file, group = Files.open_file_group(
+        collection.data, "/measurement/" + header.to_string()
+    )
+    if isinstance(group, Group):
+        collection.params.available_measurement_entries = len(group.keys())
+    if file:
+        file.close()
 
     Logger.print(
-        Logger.DEBUG,
+        Logger.INFO,
         msg=f"Selected: {collection.params.selected_measurement.to_string()}",
+    )
+    Logger.print(
+        Logger.INFO,
+        msg=f"    with: {collection.params.available_measurement_entries} entries",
     )
 
 
-def loadCurveSet(collection: DataCollection, var_range_index: int):
+def select_CurveSet(collection: DataCollection, var_range_index: int):
     """
-    Loads the specified measurement type and key from the HDF5 file.
+    Loads the specified measurement set (Sweep and Offset) from the HDF5 file.
+    If the NAN measurement is present, it will be loaded first.
     """
     data = collection.data
     Logger.print(
         Logger.INFO,
         Logger.START,
-        f"GenEval.loadCurve(var_range_index={var_range_index})",
+        f"GenEval.select_CurveSet(var_range_index={var_range_index})",
     )
 
-    # check if file exists
-    file_name = Files.getfile_path(data)
-    if not os.path.exists(file_name):
-        Logger.print(Logger.ERROR, msg=f"Error: File does not exist: {file_name}")
-        return
-
-    # show selected file
-    Logger.print(Logger.DEBUG, msg=f"Opening file: {file_name}")
-
     header = collection.params.selected_measurement
+    file, group = Files.open_file_group(data, "/measurement/" + header.to_string())
 
-    with File(file_name, "r") as data_file:
-        # get available measurements from file
-        measurement_group = data_file.get("measurement")
+    if group and isinstance(group, Group):
+        subgroups = group.keys()
 
-        if measurement_group and isinstance(measurement_group, Group):
-            measurement = measurement_group.get(header.to_string())
-            if measurement and isinstance(measurement, Group):
-                range_value_key = (
-                    header.variable.range.min
-                    + var_range_index * header.variable.range.step
+        indexes = []
+        nums = []
+        nan_index = -1
+
+        for i, label in enumerate(subgroups):
+            if "NAN" in label:
+                nan_index = i
+                continue
+
+            try:
+                num = MeasurementHeader.parse_number(label)
+                nums.append(num[0])
+                indexes.append(i)
+            except Exception as e:
+                Logger.print(
+                    Logger.DEBUG,
+                    msg=f"Measurement variation format unknown: {label} - {e}",
                 )
-                sign = "+" if range_value_key > 0 else "-"
-                key = f"u{MeasurementHeader.unit_to_symbol(header.variable.unit)}={sign}{abs(range_value_key):.2f}{header.variable.unit}"
-                ranged_measurement = measurement.get(key)
-                if ranged_measurement and isinstance(ranged_measurement, Group):
-                    offset_set = ranged_measurement.get("offset")
-                    sweep_set = ranged_measurement.get("sweep")
-                    if offset_set and isinstance(offset_set, Dataset):
-                        print()
-                    else:
-                        Logger.print(Logger.ERROR, msg="DataSets not found.")
-                        return
-                else:
-                    Logger.print(Logger.ERROR, msg="Ranged measurement not found.")
-                    return
+                continue
+
+        # numerical sort both indexes and nums depending on nums
+        # nums = sorted(nums, key=lambda x: x[0])
+        nums, indexes = zip(*sorted(zip(nums, indexes)))
+        nums = list(nums)
+        indexes = list(indexes)
+
+        indexes = (
+            [nan_index] + indexes if nan_index != -1 else indexes
+        )  # append nan_index to the front of the list
+
+        selected_index = indexes[var_range_index]
+        keys = list(subgroups)
+        selected_key = keys[selected_index]
+
+        Logger.print(
+            Logger.INFO,
+            msg=f"Selected DataSet: {selected_key}",
+        )
+        collection.params.selected_dataset = selected_key
+
+        # selected_group = group.get(selected_key)
+        # if selected_group and isinstance(selected_group, Group):
+        #     offset_set = selected_group.get("offset")
+        #     sweep_set = selected_group.get("sweep")
+
+        #     print(f"Offset: {offset_set}")
+        #     print(f"Sweep: {sweep_set}")
+
+    if file:
+        file.close()
+
+
+def get_selection_path(collection: DataCollection) -> str:
+    """
+    Returns the path to the selected measurement in the HDF5 file.
+    """
+    header = collection.params.selected_measurement
+    return f"/measurement/{header.to_string()}/{collection.params.selected_dataset}"
