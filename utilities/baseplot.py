@@ -61,7 +61,7 @@ class BasePlot(BaseClass):
         self._base_plot_name = name
 
         self.save_as_png: bool = True
-        self.save_as_fig: bool = True
+        self.save_as_fig: bool = False
         self.save_as_pdf: bool = False
 
         logger.info("(%s) ... BasePlot initialized.", self._base_plot_name)
