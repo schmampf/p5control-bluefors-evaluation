@@ -236,6 +236,12 @@ def ensure_group(obj):
     raise TypeError(f"Expected an h5py.Group, but got {type(obj)}")
 
 
+def ensure_dataset(obj):
+    if isinstance(obj, h5py.Dataset):
+        return obj
+    raise TypeError(f"Expected an h5py.Dataset, but got {type(obj)}")
+
+
 def ensure_file(obj):
     if isinstance(obj, h5py.File):
         return obj

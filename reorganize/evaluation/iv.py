@@ -2,6 +2,7 @@
 # std
 from dataclasses import dataclass, field
 from typing import Any
+from enum import Enum
 
 # third-party
 import numpy as np
@@ -11,6 +12,7 @@ import h5py
 import integration.files as Files
 from integration.files import DataCollection
 import utilities.logging as Logger
+import algorithms.binning as Binning
 
 # endregion
 
@@ -76,8 +78,40 @@ class Curve:
 @dataclass
 class DataSet:
     name: str = field(default="")
-    curves: dict[str, Any] = field(default_factory=dict)
+    curves: dict[str, np.ndarray] = field(default_factory=dict)
     voltage_offsets: tuple[float, float] = field(default_factory=tuple)
+
+    def check_curves(self):
+        num_points = None
+        for key, curve in self.curves.items():
+            if num_points is None:
+                num_points = len(curve)
+            else:
+                assert (
+                    len(curve) == num_points
+                ), f"The number of points in the curves is not equal: {num_points} != {len(curve)}"
+
+    def filter_trigger(self, params: "Parameters") -> "DataSet | None":
+        if "trigger" not in self.curves:
+            Logger.print(
+                Logger.ERROR,
+                msg="No trigger curve found in the dataset.",
+            )
+            return None
+
+        new_set = DataSet()
+        new_set.name = self.name
+        new_set.voltage_offsets = self.voltage_offsets
+
+        trigger_index = params.edge_num * trigger_num(params.edge_dir) + (
+            params.edge_num - 1 if params.edge_dir == "up" else 0
+        )
+        trigger_dat = self.curves["trigger"]
+
+        for key, curve in self.curves.items():
+            new_set.curves[key] = curve[trigger_dat == trigger_index].copy()
+
+        return new_set
 
 
 @dataclass
@@ -97,20 +131,15 @@ class Map:
 
 @dataclass
 class Result:
-    temperatures: Axis = field(default_factory=Axis)  # one per dataset
-    time_starts: Axis = field(default_factory=Axis)  # one per dataset
-    time_stops: Axis = field(default_factory=Axis)  # one per dataset
-    temp_current: Map = field(default_factory=Map)
-    temp_voltage: Map = field(default_factory=Map)
-    diff_resistance: Map = field(default_factory=Map)
-    diff_conductance: Map = field(default_factory=Map)
-
-
-@dataclass
-class Results:
-    upsweep: Result = field(default_factory=Result)
-    downsweep: Result = field(default_factory=Result)
-    cache: Result = field(default_factory=Result)
+    raw_sets: dict[str, DataSet] = field(default_factory=dict)
+    processed_sets: dict[str, DataSet] = field(default_factory=dict)
+    # temperatures: Axis = field(default_factory=Axis)  # one per dataset
+    # time_starts: Axis = field(default_factory=Axis)  # one per dataset
+    # time_stops: Axis = field(default_factory=Axis)  # one per dataset
+    # temp_current: Map = field(default_factory=Map)
+    # temp_voltage: Map = field(default_factory=Map)
+    # diff_resistance: Map = field(default_factory=Map)
+    # diff_conductance: Map = field(default_factory=Map)
 
 
 @dataclass
@@ -123,18 +152,20 @@ class Configuration:
 
 @dataclass
 class Parameters:
-    downsample_freq: int = 3
-    upsample_voltage: int = 137
-    upsample_current: int = 137
-    upsample_temperature: int = 0
-    upsample_amplitude: int = 0
     edge_num: int = 0
     edge_dir: str = field(default="nan")
+
+
+# class FilterModes(Enum):
+#     TRIGGER = 1
+#     FT = 2
+#     BIN = 3
 
 
 # endregion
 
 
+# region helper
 def trigger_dir(trigger: int) -> str:
     # 0 = nan
     # 1 = up
@@ -159,10 +190,13 @@ def trigger_num(trigger: str) -> int:
         )
 
 
+# endregion
+
+
 def setup(bib: DataCollection):
     bib.iv_config = Configuration()
     bib.iv_params = Parameters()
-    bib.evaluation = Results()
+    bib.evaluation = Result()
 
     Logger.print(Logger.INFO, Logger.START, "IVEval.setup()")
 
@@ -189,18 +223,20 @@ def select_edge(
     collection.iv_params.edge_dir = dir
 
 
-def loadCurveSet(collection: DataCollection):
+def loadCurveSets(collection: DataCollection):
     Logger.print(
         Logger.INFO,
         Logger.START,
         f"IVEval.loadCurveSet()",
     )
 
-    set = DataSet()
     params = collection.params
     header = params.selected_measurement
 
-    # region raw iv loading
+    Logger.print(Logger.DEBUG, msg=f"Loading IV data")
+    # region load raw data & small calcs
+    set = DataSet(name="adwin")
+
     file, mgroup = Files.open_file_group(
         collection.data,
         "/measurement/" + header.to_string() + "/" + params.selected_dataset + "/",
@@ -225,24 +261,85 @@ def loadCurveSet(collection: DataCollection):
     set.curves["voltage"] = v
     set.curves["current"] = i
     set.curves["time"] = time
+    set.curves["trigger"] = trigger
 
     if file:
         file.close()
+    collection.evaluation.raw_sets["adwin"] = set
     # endregion
 
+    Logger.print(Logger.DEBUG, msg=f"Loading temperature data")
+    # region get temperature data
+    set = DataSet(name="bluefors")
     if collection.iv_config.eva_temperature:
         file, group = Files.open_file_group(
             collection.data,
-            f"/measurement/{header.to_string()}/{params.selected_dataset}/sweep/",
+            f"/measurement/{header.to_string()}/{params.selected_dataset}/sweep",
         )
         file = Files.ensure_file(file)
         group = Files.ensure_group(group)
-        check = "bluefors" in group.keys()
-        if check:
-            temperature = group.get("bluefors/Tsample")
-            time = group.get("bluefors/time")
-        else:
-            temperature = np.array(file.get("status/bluefors/temperature/8-mcbj"))["T"]
-            time = np.array(file.get("status/bluefors/temperature/8-mcbj"))["time"]
-        set.curves["temperature"] = np.array(temperature, dtype="float64")
-        set.curves["time"] = np.array(time, dtype="float64")
+        dset = Files.ensure_dataset(group.get("bluefors"))
+
+        set.curves["temperature"] = np.array(dset["Tsample"], dtype="float64")
+        set.curves["time"] = np.array(dset["time"], dtype="float64")
+
+        if file:
+            file.close()
+
+        collection.evaluation.raw_sets["bluefors"] = set
+    # endregion
+
+    set.check_curves()
+
+
+def filter_curve_sets(collection: DataCollection):
+    filtered = collection.evaluation.raw_sets["adwin"].filter_trigger(
+        collection.iv_params
+    )
+    collection.evaluation.processed_sets["adwin"] = filtered
+
+    start_time = filtered.curves["time"][0]
+    stop_time = filtered.curves["time"][-1]
+
+    bins = np.arange(start_time, stop_time, 43)
+
+    binned_it, _ = Binning.bin(
+        filtered.curves["time"],
+        filtered.curves["current"],
+        bins,
+    )
+    binned_vv, _ = Binning.bin(
+        filtered.curves["time"],
+        filtered.curves["voltage"],
+        bins,
+    )
+    binned_iv, _ = Binning.bin(
+        filtered.curves["voltage"],
+        filtered.curves["current"],
+        bins,
+    )
+    binned_vi, _ = Binning.bin(
+        filtered.curves["current"],
+        filtered.curves["voltage"],
+        bins,
+    )
+    binned_t = bins
+
+    filtered.curves["current-time"] = binned_it
+    filtered.curves["voltage-time"] = binned_vv
+    filtered.curves["current-voltage"] = binned_iv
+    filtered.curves["voltage-current"] = binned_vi
+    filtered.curves["time"] = binned_t
+
+
+def process_curve_sets(
+    collection: DataCollection,
+):
+    Logger.print(
+        Logger.INFO,
+        Logger.START,
+        f"IVEval.eval_loaded_curve_set()",
+    )
+    config = collection.iv_config
+    params = collection.iv_params
+    set = collection.evaluation.upsweep
