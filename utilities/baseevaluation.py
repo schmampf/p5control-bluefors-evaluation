@@ -219,6 +219,24 @@ class BaseEvaluation(BaseClass):
         self.specific_keys.append(key)
         self.y_unsorted = np.concatenate((self.y_unsorted, [y_value]))
 
+    def removeKey(self, key: str) -> None:
+        """
+        Removes a key from the specific key list.
+
+        Parameters
+        ----------
+        key : str
+            The measurement key to remove.
+        """
+        logger.info("(%s) removeKey('%s')", self._base_eva_name, key)
+
+        try:
+            self.specific_keys.remove(key)
+        except ValueError:
+            logger.warning(
+                "(%s) Key '%s' not found in specific keys.", self._base_eva_name, key
+            )
+
     def setKeys(
         self,
         index_0: int = 0,
