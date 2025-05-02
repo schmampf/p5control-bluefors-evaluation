@@ -5,8 +5,10 @@ import importlib
 
 import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib as mpl
 
-
+from tqdm import tqdm
+from contextlib import contextmanager
 from utilities.baseplot import BasePlot
 from utilities.ivevaluation import IVEvaluation
 from utilities.basefunctions import get_norm
@@ -26,10 +28,28 @@ logger = logging.getLogger(__name__)
 from scipy.signal import savgol_filter
 from scipy.interpolate import NearestNDInterpolator
 
+
+# Increase the limit
+# Or disable the warning entirely
+mpl.rcParams["figure.max_open_warning"] = 0
+
 # endregion
 
 
 # region functions
+
+
+@contextmanager
+def suppress_logging():
+    logger = logging.getLogger()
+    original_level = logger.level
+    logger.setLevel(logging.CRITICAL)
+    try:
+        yield
+    finally:
+        logger.setLevel(original_level)
+
+
 def do_smoothing(data: np.ndarray, window_length: int = 20, polyorder: int = 2):
     is_nan = np.isnan(data)
     mask = np.where(np.logical_not(is_nan))
@@ -67,7 +87,7 @@ class IVPlot(IVEvaluation, BasePlot):
             "fig_size": (6, 4),
             "dpi": 100,
             "cmap": cmap(bad="grey"),
-            "smoothing": True,
+            "smoothing": False,
             "window_length": 20,
             "polyorder": 2,
         }
@@ -75,6 +95,29 @@ class IVPlot(IVEvaluation, BasePlot):
         logger.info("(%s) ... BasePlot initialized.", self._iv_plot_name)
 
     # region get data
+
+    def get_y_len(self):
+        return self.mapped["y_axis"].shape[0]
+
+    def get_y(
+        self,
+        index: int = 0,
+        plain: bool = False,
+    ):
+        if plain:
+            return np.nan
+        else:
+            return self.mapped["y_axis"][index]
+
+    def get_T(
+        self,
+        index: int = 0,
+        plain: bool = False,
+    ):
+        if plain:
+            return self.to_plot["plain"]["temperature"][0]
+        else:
+            return self.to_plot["temperature"][index]
 
     def get_ivt(
         self,
@@ -106,7 +149,7 @@ class IVPlot(IVEvaluation, BasePlot):
             v = np.copy(ivt[1][skip[0] : skip[1]])
             t = np.copy(ivt[2][skip[0] : skip[1]])
         else:
-            ivt = self.to_plot["iv_tuples"][index]
+            ivt = self.to_plot["iv_tuples_raw"][index]
             i = np.copy(ivt[0])
             v = np.copy(ivt[1])
             t = np.copy(ivt[2])
@@ -231,7 +274,7 @@ class IVPlot(IVEvaluation, BasePlot):
         ax=None,
         index: int = 0,
         skip: list[int] = [10, -10],
-        plain: bool = False,
+        plain: bool = True,
         fig_nr: int = 0,
         inverse: bool = False,
         raw: bool = False,
@@ -283,7 +326,7 @@ class IVPlot(IVEvaluation, BasePlot):
         ax=None,
         index: int = 0,
         skip: list[int] = [10, -10],
-        plain: bool = False,
+        plain: bool = True,
         fig_nr: int = 0,
         inverse: bool = False,
         raw: bool = False,
@@ -337,7 +380,7 @@ class IVPlot(IVEvaluation, BasePlot):
         ax=None,
         index: int = 0,
         skip: list[int] = [10, -10],
-        plain: bool = False,
+        plain: bool = True,
         fig_nr: int = 0,
         inverse: bool = False,
         raw: bool = False,
@@ -389,7 +432,7 @@ class IVPlot(IVEvaluation, BasePlot):
         self,
         ax=None,
         index: int = 0,
-        plain: bool = False,
+        plain: bool = True,
         fig_nr: int = 0,
         inverse: bool = False,
         **kwargs,
@@ -425,7 +468,7 @@ class IVPlot(IVEvaluation, BasePlot):
         self,
         ax=None,
         index: int = 0,
-        plain: bool = False,
+        plain: bool = True,
         fig_nr: int = 0,
         inverse: bool = False,
         **kwargs,
@@ -464,6 +507,7 @@ class IVPlot(IVEvaluation, BasePlot):
         plain: bool = False,
         fig_nr: int = 0,
         inverse: bool = False,
+        **kwargs,
     ):
         if not ax:
             # Generate Figure
@@ -472,6 +516,15 @@ class IVPlot(IVEvaluation, BasePlot):
 
         # get_data
         v, didv = self.get_didv_v(index, plain)
+
+        # Apply optional smoothing to dI/dV map
+        if self.smoothing:
+            didv = do_smoothing(
+                data=np.array([didv]),
+                window_length=self.window_length,
+                polyorder=self.polyorder,
+            )
+            didv = didv[0]
 
         # get_norm
         v_norm_value, v_norm_string = get_norm(v)
@@ -484,12 +537,12 @@ class IVPlot(IVEvaluation, BasePlot):
         if not inverse:
             ax.set_xlabel(rf"$V$ ({v_norm_string}V)")
             ax.set_ylabel(rf"d$I$/d$V$ ({didv_norm_string}$G_0$)")
-            ax.plot(v / v_norm_value, didv / didv_norm_value, ".")
+            ax.plot(v / v_norm_value, didv / didv_norm_value, ".", **kwargs)
 
         else:
             ax.set_xlabel(rf"d$I$/d$V$ ({didv_norm_string}$G_0$)")
             ax.set_ylabel(rf"$V$ ({v_norm_string}V)")
-            ax.plot(didv / didv_norm_value, v / v_norm_value, ".")
+            ax.plot(didv / didv_norm_value, v / v_norm_value, ".", **kwargs)
         return ax
 
     def ax_dvdi_i(
@@ -956,6 +1009,7 @@ class IVPlot(IVEvaluation, BasePlot):
         x_lim: tuple = (None, None),
         y_lim: tuple = (None, None),
         z_lim: tuple = (None, None),
+        width_ratio: list[float] = [1.0, 4.0, 0.2],
     ):
         plt.close(fig_nr)
         fig, axs = plt.subplots(
@@ -964,7 +1018,7 @@ class IVPlot(IVEvaluation, BasePlot):
             ncols=3,
             figsize=self.fig_size,
             dpi=self.dpi,
-            gridspec_kw={"width_ratios": [1, 4, 0.2]},
+            gridspec_kw={"width_ratios": width_ratio},
             constrained_layout=True,
         )
         # get axs
@@ -1052,6 +1106,8 @@ class IVPlot(IVEvaluation, BasePlot):
         x_lim: tuple = (None, None),
         y_lim: tuple = (None, None),
         z_lim: tuple = (None, None),
+        plain: bool = True,
+        index: int = 0,
     ):
         plt.close(fig_nr)
         fig, axs = plt.subplots(
@@ -1068,28 +1124,56 @@ class IVPlot(IVEvaluation, BasePlot):
 
         axs[1, 1] = self.ax_v_i_tuples(
             ax=axs[1, 1],
-            index=0,
-            plain=True,
+            index=index,
+            plain=plain,
             fig_nr=fig_nr,
             inverse=True,
             raw=True,
             color="lightgrey",
+            label="raw",
         )
 
         axs[1, 1] = self.ax_v_i_tuples(
-            ax=axs[1, 1], index=0, plain=True, fig_nr=fig_nr, inverse=True, color="grey"
+            ax=axs[1, 1],
+            index=index,
+            plain=plain,
+            fig_nr=fig_nr,
+            inverse=True,
+            raw=False,
+            color="grey",
+            label="sampled",
         )
         axs[1, 1] = self.ax_i_v(
-            ax=axs[1, 1], index=0, plain=True, fig_nr=fig_nr, inverse=False, color="red"
+            ax=axs[1, 1],
+            index=index,
+            plain=plain,
+            fig_nr=fig_nr,
+            inverse=False,
+            color="red",
+            label="I(V)",
         )
         axs[1, 1] = self.ax_v_i(
-            ax=axs[1, 1], index=0, plain=True, fig_nr=fig_nr, inverse=True, color="blue"
+            ax=axs[1, 1],
+            index=index,
+            plain=plain,
+            fig_nr=fig_nr,
+            inverse=True,
+            color="blue",
+            label="V(I)",
         )
+        axs[1, 1].plot([0, 0], [0, 0], "white", label="T(K)", zorder=0)
+        T = self.get_T(index=index, plain=plain)
+        axs[1, 1].legend(
+            ["raw", "sampled", "$I(V)$", "$V(I)$", f"$T={T*1000:06.1f}$mK"],
+            fontsize=8,
+            loc="upper left",
+        )
+
         axs[0, 1] = self.ax_didv_v(
-            ax=axs[0, 1], index=0, plain=True, fig_nr=fig_nr, inverse=False
+            ax=axs[0, 1], index=index, plain=plain, fig_nr=fig_nr, inverse=False
         )
         axs[1, 0] = self.ax_dvdi_i(
-            ax=axs[1, 0], index=0, plain=True, fig_nr=fig_nr, inverse=True
+            ax=axs[1, 0], index=index, plain=plain, fig_nr=fig_nr, inverse=True
         )
 
         # modify
@@ -1111,72 +1195,16 @@ class IVPlot(IVEvaluation, BasePlot):
         axs[0, 1].set_ylim(y_lim)
         axs[1, 1].set_ylim(z_lim)
 
-        # axs[1, 1].sharex(axs[0, 1])
-        # axs[1, 1].sharey(axs[1, 0])
+        axs[1, 1].sharex(axs[0, 1])
+        axs[1, 1].sharey(axs[1, 0])
 
         return fig, axs
-
-    # def fig_ivs(
-    #     self,
-    #     index: int = 0,
-    #     plain: bool = False,
-    #     fig_nr: int = 0,
-    #     x_lim: tuple = (None, None),
-    #     y_lim: tuple = (None, None),
-    # ):
-    #     import numpy as np
-    #     import matplotlib.pyplot as plt
-    #     from matplotlib.animation import FuncAnimation
-
-    #     plt.close(fig_nr)
-    #     fig, ax = plt.subplots(
-    #         num=fig_nr,
-    #         nrows=1,
-    #         ncols=1,
-    #         figsize=self.fig_size,
-    #         dpi=self.dpi,
-    #         constrained_layout=True,
-    #     )
-
-    #     (line,) = ax.plot([], [], "r.")
-
-    #     i, v = self.get_i_v(index=0)
-
-    #     # get_norm
-    #     v_norm_value, v_norm_string = get_norm(v)
-    #     i_norm_value, i_norm_string = get_norm(i)
-
-    #     v /= v_norm_value
-
-    #     # Initialization function: plot empty frame
-    #     def init():
-    #         line.set_data(v, i / i_norm_value)
-    #         return (line,)
-
-    #     # set limits
-    #     ax.set_xlim(x_lim)
-    #     ax.set_ylim(y_lim)
-
-    #     def update(frame):
-    #         i, _ = self.get_i_v(index=frame)
-    #         line.set_data(v, i / i_norm_value)
-    #         return (line,)
-
-    #     frames = np.arange(self.mapped["y_axis"].shape[0])
-
-    #     ani = FuncAnimation(
-    #         fig, update, frames=frames, init_func=init, blit=False, interval=20
-    #     )
-    #     plt.show()
-    #     ani.save("sine_wave.mp4", fps=30)
-
-    #     return fig, ax
 
     # endregion
 
     # begin plot all
 
-    def plot_all(self, leading_index: int = 0):
+    def plot_all(self, leading_index: int = 0, ivs: bool = True):
         i = 0
         fig, axs = self.fig_didv_vy(z_lim=(None, None), fig_nr=leading_index + i)
 
@@ -1210,9 +1238,48 @@ class IVPlot(IVEvaluation, BasePlot):
 
         i += 1
 
-        # # get axs
-        # for index, y_value in enumerate(self.mapped["y_axis"]):
-        #     print(index, y_value)
+        if ivs:
+            logger.info("(%s) saveIVs()", self._iv_plot_name)
+            with suppress_logging():
+                try:
+                    fig, ax = self.fig_ididv_v(
+                        fig_nr=leading_index + i,
+                        plain=True,
+                    )
+                    fig.suptitle(
+                        f"{self.sub_folder}/{self.title}/{self.title_of_plot}/IV/0000_y=NAN",
+                        fontsize=8,
+                    )
+                    self.saveFigure(
+                        fig,
+                        sub_title=f"0000_y=NAN",
+                        sub_folder=f"{self.title_of_plot}/IV",
+                    )
+                    i += 1
+                except KeyError:
+                    logger.warning(
+                        "(%s) No plain data available for %s",
+                        self._iv_plot_name,
+                        self.title_of_plot,
+                    )
+                    pass
+
+                for j, y in enumerate(tqdm(self.mapped["y_axis"])):
+                    fig, ax = self.fig_ididv_v(
+                        fig_nr=leading_index + i,
+                        plain=False,
+                        index=j,
+                    )
+                    fig.suptitle(
+                        f"{self.sub_folder}/{self.title}/{self.title_of_plot}/IV/{j+1:04d}_y={y:05.3f}",
+                        fontsize=8,
+                    )
+                    self.saveFigure(
+                        fig,
+                        sub_title=f"{j+1:04d}_y={y:05.3f}",
+                        sub_folder=f"{self.title_of_plot}/IV",
+                    )
+                    i += 1
 
     # endregion
 
