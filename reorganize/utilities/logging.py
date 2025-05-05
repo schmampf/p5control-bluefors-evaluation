@@ -11,6 +11,7 @@ glob_indent_lvl: int = 0
 local_indent_lvl: int = 0
 anchor: list[int] = []
 bib: DataCollection = DataCollection()
+suppress_print: bool = False
 
 
 class LogLevel(Enum):
@@ -62,6 +63,10 @@ def print(plevel: LogLevel, nextIndent: Indent = KEEP, msg: str = "") -> None:
     global local_indent_lvl
     global anchor
     global data
+    global suppress_print
+
+    if suppress_print:
+        return
 
     # if cascade:
     #     temp = last_anchor.pop() if last_anchor else 0

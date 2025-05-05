@@ -7,6 +7,7 @@ from enum import Enum
 # third-party
 import numpy as np
 import h5py
+from scipy import constants
 
 # local
 import integration.files as Files
@@ -113,6 +114,13 @@ class DataSet:
 
         return new_set
 
+    def copy(self) -> "DataSet":
+        new_set = DataSet()
+        new_set.name = self.name
+        new_set.voltage_offsets = self.voltage_offsets
+        new_set.curves = {key: curve.copy() for key, curve in self.curves.items()}
+        return new_set
+
 
 @dataclass
 class Map:
@@ -131,8 +139,18 @@ class Map:
 
 @dataclass
 class Result:
-    raw_sets: dict[str, DataSet] = field(default_factory=dict)
-    processed_sets: dict[str, DataSet] = field(default_factory=dict)
+    raw_sets: dict[str, DataSet] = field(
+        default_factory=dict
+    )  # raw data directly after loading and minimal preprocessing
+    cached_sets: dict[str, DataSet] = field(
+        default_factory=dict
+    )  # cached data of the last "operation" <-- main container after loading
+    filtered_sets: dict[str, DataSet] = field(
+        default_factory=dict
+    )  # data after filtering
+    processed_sets: dict[str, DataSet] = field(
+        default_factory=dict
+    )  # data after processing
     # temperatures: Axis = field(default_factory=Axis)  # one per dataset
     # time_starts: Axis = field(default_factory=Axis)  # one per dataset
     # time_stops: Axis = field(default_factory=Axis)  # one per dataset
@@ -154,12 +172,6 @@ class Configuration:
 class Parameters:
     edge_num: int = 0
     edge_dir: str = field(default="nan")
-
-
-# class FilterModes(Enum):
-#     TRIGGER = 1
-#     FT = 2
-#     BIN = 3
 
 
 # endregion
@@ -252,6 +264,7 @@ def loadCurveSets(collection: DataCollection):
     sweep = np.array(mgroup.get("sweep/adwin"))
     trigger = np.array(sweep["trigger"], dtype="int")
     time = np.array(sweep["time"], dtype="float64")
+    time = time - time[0]  # shift start time to 0
     v1 = np.array(sweep["V1"], dtype="float64")
     v2 = np.array(sweep["V2"], dtype="float64")
 
@@ -265,8 +278,8 @@ def loadCurveSets(collection: DataCollection):
 
     if file:
         file.close()
-    collection.evaluation.raw_sets["adwin"] = set
     # endregion
+    collection.evaluation.raw_sets["adwin"] = set
 
     Logger.print(Logger.DEBUG, msg=f"Loading temperature data")
     # region get temperature data
@@ -281,55 +294,79 @@ def loadCurveSets(collection: DataCollection):
         dset = Files.ensure_dataset(group.get("bluefors"))
 
         set.curves["temperature"] = np.array(dset["Tsample"], dtype="float64")
-        set.curves["time"] = np.array(dset["time"], dtype="float64")
+        time = np.array(dset["time"], dtype="float64")
+        set.curves["time"] = time - time[0]  # shift start time to 0
 
         if file:
             file.close()
 
+        # endregion
         collection.evaluation.raw_sets["bluefors"] = set
-    # endregion
 
     set.check_curves()
+    collection.evaluation.cached_sets = collection.evaluation.raw_sets.copy()
 
 
-def filter_curve_sets(collection: DataCollection):
-    filtered = collection.evaluation.raw_sets["adwin"].filter_trigger(
-        collection.iv_params
+def filter_curve_sets(collection: DataCollection, group: str, filter_freq: int = 0):
+    Logger.print(
+        Logger.INFO,
+        Logger.START,
+        f"IVEval.filter_curve_sets(filter_freq={filter_freq})",
     )
-    collection.evaluation.processed_sets["adwin"] = filtered
+    source = collection.evaluation.cached_sets
 
-    start_time = filtered.curves["time"][0]
-    stop_time = filtered.curves["time"][-1]
+    cache = source[group]
+    temp = cache.filter_trigger(collection.iv_params)
+    if temp:
+        cache = temp
+    else:
+        Logger.print(
+            Logger.WARNING,
+            msg=f"Skipped trigger selection for {group}. No trigger data found in the dataset.",
+        )
 
-    bins = np.arange(start_time, stop_time, 43)
+    if filter_freq != 0:
+        start_time = cache.curves["time"][0]
+        stop_time = cache.curves["time"][-1]
 
-    binned_it, _ = Binning.bin(
-        filtered.curves["time"],
-        filtered.curves["current"],
-        bins,
-    )
-    binned_vv, _ = Binning.bin(
-        filtered.curves["time"],
-        filtered.curves["voltage"],
-        bins,
-    )
-    binned_iv, _ = Binning.bin(
-        filtered.curves["voltage"],
-        filtered.curves["current"],
-        bins,
-    )
-    binned_vi, _ = Binning.bin(
-        filtered.curves["current"],
-        filtered.curves["voltage"],
-        bins,
-    )
-    binned_t = bins
+        bins = np.arange(start_time, stop_time, 1 / filter_freq)
 
-    filtered.curves["current-time"] = binned_it
-    filtered.curves["voltage-time"] = binned_vv
-    filtered.curves["current-voltage"] = binned_iv
-    filtered.curves["voltage-current"] = binned_vi
-    filtered.curves["time"] = binned_t
+        binned_it, _ = Binning.bin(
+            cache.curves["time"],
+            cache.curves["current"],
+            bins,
+        )
+        binned_vv, _ = Binning.bin(
+            cache.curves["time"],
+            cache.curves["voltage"],
+            bins,
+        )
+        binned_iv, _ = Binning.bin(
+            cache.curves["voltage"],
+            cache.curves["current"],
+            bins,
+        )
+        binned_vi, _ = Binning.bin(
+            cache.curves["current"],
+            cache.curves["voltage"],
+            bins,
+        )
+        binned_t = bins
+
+        cache.curves["current"] = binned_it
+        cache.curves["voltage"] = binned_vv
+        cache.curves["current-voltage"] = binned_iv
+        cache.curves["voltage-current"] = binned_vi
+        cache.curves["time"] = binned_t
+    else:
+        Logger.print(
+            Logger.INFO,
+            msg="Binning is disabled. No filter frequency set.",
+        )
+
+    source[group] = cache
+
+    collection.evaluation.filtered_sets = source.copy()
 
 
 def process_curve_sets(
@@ -340,6 +377,50 @@ def process_curve_sets(
         Logger.START,
         f"IVEval.eval_loaded_curve_set()",
     )
-    config = collection.iv_config
-    params = collection.iv_params
-    set = collection.evaluation.upsweep
+    set = collection.evaluation.cached_sets
+
+    conductance_quantum = constants.physical_constants["conductance quantum"][0]
+
+    diff_conductance = (
+        np.gradient(set["adwin"].curves["current"], set["adwin"].curves["voltage"])
+        / conductance_quantum
+    )
+    diff_resistance = np.gradient(
+        set["adwin"].curves["voltage"], set["adwin"].curves["current"]
+    )
+    temp = np.nanmean(set["bluefors"].curves["temperature"])
+
+    diffs = DataSet()
+    diffs.curves["diff_conductance"] = diff_conductance
+    diffs.curves["diff_resistance"] = diff_resistance
+    diffs.curves["temperature"] = temp
+
+    collection.evaluation.cached_sets["diffs"] = diffs
+
+
+def get_noise(
+    collection: DataCollection, set_name: str, curve: tuple[str, str], result: str
+):
+    Logger.print(
+        Logger.INFO,
+        Logger.START,
+        f"IVEval.get_noise({set_name}, {curve}, {result})",
+    )
+    source = collection.evaluation.cached_sets
+    dataset = source[set_name]
+
+    c1 = dataset.curves[curve[0]]
+    c2 = dataset.curves[curve[1]]
+
+    n = len(c1)
+    dx = float(np.median(np.diff(c1)))
+    freqs = np.fft.fftfreq(n, dx)[: n // 2]
+    spectrum = np.abs(np.fft.fft(c2)[: n // 2])
+    spec_log = np.log10(spectrum)
+
+    noise = source["noise"]
+
+    noise.curves[f"{result}-freq"] = freqs
+    noise.curves[f"{result}-spec"] = spec_log
+
+    collection.evaluation.processed_sets["noise"] = noise.copy()
