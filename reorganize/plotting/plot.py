@@ -55,44 +55,55 @@ def plot_curves(
         plt.show()
 
 
-def plot_map(
-    bib: DataCollection,
-    yz: tuple[str, str],
+# def plot_map(bib: DataCollection, xy: tuple[str, str], style: dict[str, str]):
+#     """
+#     Plot a map of the selected measurement.\n
+#     Parameters
+#     ----------
+#     xy: paths to the x and y axes, each given by "dataset/curve", z axis given by measurement variable
+#     """
+
+#     plt.imshow(
+#         map[:, :],
+#         cmap="viridis",
+#         interpolation="nearest",
+#     )
+
+#     x_tick_loc = np.linspace(0, map.shape[1] - 1, 11)
+#     plt.xticks(
+#         x_tick_loc,
+#         [f"{x:.2f}" for x in x_values.flatten()[x_tick_loc.astype(int)]],
+#     )
+#     y_tick_loc = np.linspace(0, num_slices - 1, 11)
+#     plt.yticks(
+#         y_tick_loc,
+#         [f"{z:.2f}" for z in z_values.flatten()[y_tick_loc.astype(int)]],
+#     )
+#     print(z_values.flatten())
+
+#     if style:
+#         unpack_style(style)
+#     plt.gca().set_aspect("auto")
+#     plt.show()
+
+
+def get_unit(name: str) -> str:
+    """
+    Get the unit of a given name.
+    """
+    if name == "current":
+        return "A"
+    elif name == "voltage":
+        return "V"
+    elif name == "time":
+        return "s"
+    else:
+        return ""
+
+
+def unpack_style(
+    style: dict[str, str],
 ):
-    num_slices = bib.params.available_measurement_entries
-    x = bib.params.selected_measurement.variable.name
-
-    ypath, y = yz[0].split("/")
-    zpath, z = yz[1].split("/")
-
-    init: bool = False
-    map = np.empty((num_slices - 1, 0), dtype=float)
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection="3d")
-
-    z_vals = np.arange(num_slices - 1)
-
-    Logger.suppress_print = True
-    for i in range(1, num_slices):
-        print(f"Processing {i} of {num_slices}")
-
-        Macros.macro_eval(bib, i, ypath)
-        resulty = bib.evaluation.cached_sets[ypath].curves[y]
-        resultz = bib.evaluation.cached_sets[zpath].curves[z]
-
-        if not init:
-            map = np.empty((num_slices - 1, resulty.size), dtype=float)
-            init = True
-
-        map[i - 1, :] = bib.evaluation.cached_sets[ypath].curves[y]
-        x = (np.full_like(resulty, z_vals[i - 1]),)
-        ax.plot(x, resulty, resultz)
-
-    Logger.suppress_print = False
-
-    # plt.imshow(
-    #     map,
-    # )
-    plt.gca().set_aspect("auto")
-    plt.show()
+    plt.xlabel(style.get("x-axis", "err"))
+    plt.ylabel(style.get("y-axis", "err"))
+    plt.colorbar(label=style.get("z-axis", "err"))

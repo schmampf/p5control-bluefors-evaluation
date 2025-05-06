@@ -161,6 +161,7 @@ class MeasurementHeader:
     @staticmethod
     def parse_number(s: str) -> tuple:  # "Sign0.01Unit" -> (0.01, "Unit")
 
+        s = s.split("=")[1]
         s = s.replace(" ", "")
 
         def isDigit(s: str) -> bool:
@@ -188,6 +189,9 @@ class MeasurementHeader:
         sign = -1 if num_str[0] == "-" else 1
         num_str = num_str[1:] if signed else num_str
 
+        if num_str == "NAN":
+            num_str = "0.0"
+
         value = float(num_str) * sign if not num_str == "" else np.nan
 
         unit = s[len(s) - num_end :]
@@ -207,6 +211,9 @@ class Parameters:
 
     available_measurements: List[MeasurementHeader] = field(default_factory=lambda: [])
     available_measurement_entries: int = field(default_factory=lambda: -1)
+    available_measurement_entries_labels: List[str] = field(
+        default_factory=lambda: [],
+    )
 
     def __setattr__(self, name: str, value: Any):
         if name == "volt_amp" and not np.array_equal(value, np.array([0.0, 0.0])):
@@ -423,6 +430,9 @@ def select_measurement(collection: DataCollection, header_index: int):
     )
     if isinstance(group, Group):
         collection.params.available_measurement_entries = len(group.keys())
+        collection.params.available_measurement_entries_labels = [
+            str(s) for s in group.keys()
+        ]
     if file:
         file.close()
 

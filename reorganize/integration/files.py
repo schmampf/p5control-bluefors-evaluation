@@ -253,12 +253,14 @@ def setup(collection: DataCollection, name: str = "", root_dir: str = ""):
     Setup the file data attributes and directory structure.
     If no root directory is provided, default directories are assumed.
     """
+    name = name or collection.data.name
+    root_dir = root_dir or collection.data.file_directory
 
     Logger.print(
         Logger.INFO, Logger.START, f"Files.setup(name={name}, root_dir={root_dir})"
     )
 
-    data = collection.packets["data"]
+    data = collection.data
     data.name = name
     if not root_dir:
         Logger.print(
@@ -282,3 +284,12 @@ def setup(collection: DataCollection, name: str = "", root_dir: str = ""):
 
         file_directory = root_dir
     data.file_directory = file_directory
+
+
+def reload(collection: DataCollection):
+    """
+    Reload the file data attributes from the current directory.
+    """
+    Logger.print(Logger.INFO, Logger.START, "Files.reload()")
+
+    setup(collection)

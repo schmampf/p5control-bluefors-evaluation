@@ -307,15 +307,15 @@ def loadCurveSets(collection: DataCollection):
     collection.evaluation.cached_sets = collection.evaluation.raw_sets.copy()
 
 
-def filter_curve_sets(collection: DataCollection, group: str, filter_freq: int = 0):
+def filter_curve_sets(collection: DataCollection, group: str, bin_count: int = 0):
     Logger.print(
         Logger.INFO,
         Logger.START,
-        f"IVEval.filter_curve_sets(filter_freq={filter_freq})",
+        f"IVEval.filter_curve_sets(bin_count={bin_count})",
     )
     source = collection.evaluation.cached_sets
 
-    cache = source[group]
+    cache = source[group].copy()
     temp = cache.filter_trigger(collection.iv_params)
     if temp:
         cache = temp
@@ -325,39 +325,60 @@ def filter_curve_sets(collection: DataCollection, group: str, filter_freq: int =
             msg=f"Skipped trigger selection for {group}. No trigger data found in the dataset.",
         )
 
-    if filter_freq != 0:
+    if bin_count != 0:
         start_time = cache.curves["time"][0]
         stop_time = cache.curves["time"][-1]
 
-        bins = np.arange(start_time, stop_time, 1 / filter_freq)
+        t_bins = np.linspace(start_time, stop_time, bin_count)
+        cache.curves["time-bin"] = t_bins
 
-        binned_it, _ = Binning.bin(
-            cache.curves["time"],
-            cache.curves["current"],
-            bins,
-        )
-        binned_vv, _ = Binning.bin(
-            cache.curves["time"],
-            cache.curves["voltage"],
-            bins,
-        )
-        binned_iv, _ = Binning.bin(
-            cache.curves["voltage"],
-            cache.curves["current"],
-            bins,
-        )
-        binned_vi, _ = Binning.bin(
-            cache.curves["current"],
-            cache.curves["voltage"],
-            bins,
-        )
-        binned_t = bins
+        if group == "adwin":
+            v_bins = np.linspace(
+                np.min(cache.curves["voltage"]),
+                np.max(cache.curves["voltage"]),
+                bin_count,
+            )
+            i_bins = np.linspace(
+                np.min(cache.curves["current"]),
+                np.max(cache.curves["current"]),
+                bin_count,
+            )
 
-        cache.curves["current"] = binned_it
-        cache.curves["voltage"] = binned_vv
-        cache.curves["current-voltage"] = binned_iv
-        cache.curves["voltage-current"] = binned_vi
-        cache.curves["time"] = binned_t
+            binned_it, _ = Binning.bin(
+                cache.curves["time"],
+                cache.curves["current"],
+                t_bins,
+            )
+            binned_vt, _ = Binning.bin(
+                cache.curves["time"],
+                cache.curves["voltage"],
+                t_bins,
+            )
+            binned_iv, _ = Binning.bin(
+                cache.curves["voltage"],
+                cache.curves["current"],
+                v_bins,
+            )
+            binned_vi, _ = Binning.bin(
+                cache.curves["current"],
+                cache.curves["voltage"],
+                i_bins,
+            )
+
+            cache.curves["current"] = binned_it
+            cache.curves["voltage"] = binned_vt
+            cache.curves["current-voltage"] = binned_iv
+            cache.curves["voltage-current"] = binned_vi
+            cache.curves["voltage-bin"] = v_bins
+            cache.curves["current-bin"] = i_bins
+        elif group == "bluefors":
+            binned_temp, _ = Binning.bin(
+                cache.curves["time"],
+                cache.curves["temperature"],
+                t_bins,
+            )
+            cache.curves["temperature"] = binned_temp
+
     else:
         Logger.print(
             Logger.INFO,
@@ -366,7 +387,7 @@ def filter_curve_sets(collection: DataCollection, group: str, filter_freq: int =
 
     source[group] = cache
 
-    collection.evaluation.filtered_sets = source.copy()
+    collection.evaluation.filtered_sets[group] = cache.copy()
 
 
 def process_curve_sets(
@@ -418,9 +439,10 @@ def get_noise(
     spectrum = np.abs(np.fft.fft(c2)[: n // 2])
     spec_log = np.log10(spectrum)
 
-    noise = source["noise"]
+    if not "noise" in source.keys():
+        source["noise"] = DataSet()
 
-    noise.curves[f"{result}-freq"] = freqs
-    noise.curves[f"{result}-spec"] = spec_log
+    source["noise"].curves[f"{result}-freq"] = freqs
+    source["noise"].curves[f"{result}-spec"] = spec_log
 
-    collection.evaluation.processed_sets["noise"] = noise.copy()
+    collection.evaluation.processed_sets["noise"] = source["noise"].copy()
