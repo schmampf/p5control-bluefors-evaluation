@@ -1,23 +1,11 @@
-import numpy as np
-import matplotlib.pyplot as plt
+import utilities.logging as Logger
+import integration.files as Files
 
+bib = Files.DataCollection()
 
-# list = [
-#     np.array([0, 0, 0, 0, 0]),
-#     np.array([0, 1, 0, 1, 0]),
-#     np.array([0, 0, 0, 0, 0]),
-#     np.array([0, 1, 1, 1, 0]),
-#     np.array([0, 0, 0, 0, 0]),
-# ]
+Logger.setup(bib)
+Logger.set_level(Logger.INFO)
 
-# data = np.empty((5, 5))
+bib.data.name = "test"
 
-# for i, val in enumerate(list):
-#     data[i, :] = list[i]
-
-# plt.imshow(data)
-# plt.colorbar()
-# plt.show()
-
-idx = np.linspace(0, 1000, 11)
-print(idx)
+Logger.print(Logger.WARNING, msg="This is an info message")

@@ -127,18 +127,20 @@ class Map:
     name: str = field(default="")
     x_axis: Axis = field(default_factory=Axis)
     y_axis: Axis = field(default_factory=Axis)
+    z_axis: Axis = field(default_factory=Axis)
     values: np.ndarray = field(
         default_factory=lambda: np.full((0, 0), np.nan, dtype=np.float64)
     )
 
     def __post_init__(self):
-        self.values = np.full(
-            (self.x_axis.bins, self.y_axis.bins), np.nan, dtype=np.float64
-        )
+        if np.shape(self.values) == (0, 0):
+            self.values = np.full(
+                (self.x_axis.bins, self.y_axis.bins), np.nan, dtype=np.float64
+            )
 
 
 @dataclass
-class Result:
+class SliceResult:
     raw_sets: dict[str, DataSet] = field(
         default_factory=dict
     )  # raw data directly after loading and minimal preprocessing
@@ -151,13 +153,11 @@ class Result:
     processed_sets: dict[str, DataSet] = field(
         default_factory=dict
     )  # data after processing
-    # temperatures: Axis = field(default_factory=Axis)  # one per dataset
-    # time_starts: Axis = field(default_factory=Axis)  # one per dataset
-    # time_stops: Axis = field(default_factory=Axis)  # one per dataset
-    # temp_current: Map = field(default_factory=Map)
-    # temp_voltage: Map = field(default_factory=Map)
-    # diff_resistance: Map = field(default_factory=Map)
-    # diff_conductance: Map = field(default_factory=Map)
+
+
+@dataclass
+class Result:
+    maps: dict[str, Map] = field(default_factory=dict)
 
 
 @dataclass
@@ -172,6 +172,7 @@ class Configuration:
 class Parameters:
     edge_num: int = 0
     edge_dir: str = field(default="nan")
+    bins: int = -1
 
 
 # endregion
@@ -208,7 +209,8 @@ def trigger_num(trigger: str) -> int:
 def setup(bib: DataCollection):
     bib.iv_config = Configuration()
     bib.iv_params = Parameters()
-    bib.evaluation = Result()
+    bib.evaluation = SliceResult()
+    bib.result = Result()
 
     Logger.print(Logger.INFO, Logger.START, "IVEval.setup()")
 

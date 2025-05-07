@@ -1,19 +1,48 @@
 # region imports
 # std
+from typing import Any
+from enum import Enum, auto
 
 # third-party
 from matplotlib import pyplot as plt
 import numpy as np
 
 # local
-import evaluation.iv as IVEval
-import evaluation.general as GenEval
 import utilities.logging as Logger
-import integration.files as Files
 from integration.files import DataCollection
-import algorithms.binning as Binning
-import utilities.macros as Macros
 
+# endregion
+
+
+# region constants
+class StyleKeys(Enum):
+    X_LABEL = auto()
+    Y_LABEL = auto()
+    Z_LABEL = auto()
+
+    X_LIM = auto()
+    Y_LIM = auto()
+    Z_LIM = auto()
+
+    CMAP = auto()
+    CBAR = auto()
+    INTERPOL = auto()
+
+    ASPECT = auto()
+    TICKS = auto()
+
+
+X_LABEL = StyleKeys.X_LABEL
+Y_LABEL = StyleKeys.Y_LABEL
+Z_LABEL = StyleKeys.Z_LABEL
+X_LIM = StyleKeys.X_LIM
+Y_LIM = StyleKeys.Y_LIM
+Z_LIM = StyleKeys.Z_LIM
+CMAP = StyleKeys.CMAP
+CBAR = StyleKeys.CBAR
+INTERPOL = StyleKeys.INTERPOL
+ASPECT = StyleKeys.ASPECT
+TICKS = StyleKeys.TICKS
 # endregion
 
 
@@ -55,36 +84,62 @@ def plot_curves(
         plt.show()
 
 
-# def plot_map(bib: DataCollection, xy: tuple[str, str], style: dict[str, str]):
-#     """
-#     Plot a map of the selected measurement.\n
-#     Parameters
-#     ----------
-#     xy: paths to the x and y axes, each given by "dataset/curve", z axis given by measurement variable
-#     """
+def map(bib: DataCollection, type: list[str], styling: list[dict[StyleKeys, Any]]):
+    if len(type) != len(styling):
+        Logger.print(
+            Logger.ERROR,
+            msg=f"Type and styling must be the same length ({len(type)} != {len(styling)})",
+        )
+        return
 
-#     plt.imshow(
-#         map[:, :],
-#         cmap="viridis",
-#         interpolation="nearest",
-#     )
+    for i, t in enumerate(type):
+        match t:
+            case "VVI":
+                style = styling[i]
+                map = bib.result.maps["VVI"]
+                xcoords = map.x_axis.values
+                ycoords = map.y_axis.values
 
-#     x_tick_loc = np.linspace(0, map.shape[1] - 1, 11)
-#     plt.xticks(
-#         x_tick_loc,
-#         [f"{x:.2f}" for x in x_values.flatten()[x_tick_loc.astype(int)]],
-#     )
-#     y_tick_loc = np.linspace(0, num_slices - 1, 11)
-#     plt.yticks(
-#         y_tick_loc,
-#         [f"{z:.2f}" for z in z_values.flatten()[y_tick_loc.astype(int)]],
-#     )
-#     print(z_values.flatten())
+                plt.imshow(
+                    map.values,
+                    cmap=style.get(CMAP, "viridis"),
+                    interpolation=style.get(INTERPOL, None),
+                    aspect=style.get(ASPECT, "auto"),
+                    extent=(
+                        xcoords[0],
+                        xcoords[-1],
+                        ycoords[0],
+                        ycoords[-1],
+                    ),
+                )
+                # region labels
+                plt.xlabel(style.get(X_LABEL) or map.x_axis.name)
+                plt.ylabel(style.get(Y_LABEL) or map.y_axis.name)
+                if style.get(CBAR, False):
+                    plt.colorbar(label=style.get(Z_LABEL, map.z_axis.name))
+                # endregion
+                # region lims
+                if style.get(X_LIM):
+                    plt.xlim(style.get(X_LIM))
+                if style.get(Y_LIM):
+                    plt.ylim(style.get(Y_LIM))
+                if style.get(Z_LIM):
+                    plt.clim(style.get(Z_LIM))
+                # endregion
+                # region ticks
+                ticks = style.get(TICKS)
+                if ticks:
+                    plt.locator_params(axis="x", nbins=ticks[0])
+                    plt.locator_params(axis="y", nbins=ticks[1])
+                    # if style.get(CBAR, False):
+                    #     cbar = plt.colorbar(label=style.get(Z_LABEL, map.z_axis.name))
+                    #     cbar_ticks = style.get("CBAR_TICKS")  # Add a key for color bar ticks
+                    #     if cbar_ticks:
+                    #         cbar.set_ticks(np.linspace(cbar.vmin, cbar.vmax, cbar_ticks))
 
-#     if style:
-#         unpack_style(style)
-#     plt.gca().set_aspect("auto")
-#     plt.show()
+                # endregion
+
+    plt.show()
 
 
 def get_unit(name: str) -> str:

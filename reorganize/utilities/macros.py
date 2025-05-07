@@ -1,49 +1,88 @@
-import evaluation.iv as IVEval
-import evaluation.general as GenEval
-import utilities.logging as Logger
-import integration.files as Files
-from integration.files import DataCollection
-import algorithms.binning as Binning
+# region imports
+# std
 
+# third party
 import numpy as np
 
+# local
+from integration.files import DataCollection
+import utilities.logging as Logger
+import evaluation.general as GenEval
+import evaluation.iv as IVEval
 
-def eval(bib: DataCollection, curve_index: int, filter_set: str):
-    """Evaluate a single set of curves"""
+# endregion
+
+
+def load(bib: DataCollection, curve_index: int):
+    """Load a single set of curves"""
     GenEval.select_CurveSet(bib, curve_index)
     IVEval.loadCurveSets(bib)
-    # print(bib.evaluation.cached_sets["adwin"].curves.keys())
-    IVEval.filter_curve_sets(bib, filter_set, 1000)
-    # print(bib.evaluation.cached_sets["adwin"].curves.keys())
+
+
+def eval(bib: DataCollection, filter_set: str):
+    """Evaluate a single set of curves"""
+    if not bib.iv_params.bins > 0:
+        Logger.print(
+            Logger.ERROR,
+            msg="The number of bins must be greater than 0",
+        )
+        assert False
+
+    IVEval.filter_curve_sets(bib, filter_set, bib.iv_params.bins)
     IVEval.process_curve_sets(bib)
-    # print(bib.evaluation.cached_sets["adwin"].curves.keys())
     if filter_set == "adwin":
         IVEval.get_noise(bib, "adwin", ("time", "current"), "It")
 
 
-def bulk_eval(bib: DataCollection) -> dict[str, np.ndarray]:
+def bulk_eval(bib: DataCollection):
     result = {}
     num_slices = bib.params.available_measurement_entries
     slice_index = np.linspace(0, num_slices - 1, num_slices, dtype=int)
     init: bool = False
 
-    result["VVI"] = np.empty((num_slices, 0), dtype=float)
+    VVI = np.empty((num_slices, 0), dtype=float)
 
     Logger.suppress_print = True
     for i in slice_index:
-        print(f"\rEvaluating {i}/{num_slices}", end="")
+        Logger.print(
+            Logger.INFO,
+            msg=f"Evaluating Set: {i+1}/{num_slices} ({i/num_slices:.0%}) (id: {bib.params.selected_dataset})",
+            force=True,
+            updating=True,
+        )
 
-        eval(bib, i, "adwin")
-        eval(bib, i, "bluefors")
+        load(bib, i)
+        eval(bib, "adwin")
+        eval(bib, "bluefors")
 
-        iv_y = bib.evaluation.cached_sets["adwin"].curves["current-voltage"]
         iv_x = bib.evaluation.cached_sets["adwin"].curves["voltage-bin"]
+        iv_z = bib.evaluation.cached_sets["adwin"].curves["current-voltage"]
 
         if not init:
-            result["VVI"] = np.empty((num_slices, iv_x.size), dtype=float)
+            VVI = np.empty((num_slices, iv_x.size), dtype=float)
             init = True
 
-        result["VVI"][i, :] = np.array(iv_y, dtype=float)
+        VVI[i, :] = np.gradient(np.array(iv_z, dtype=float))
     Logger.suppress_print = False
 
-    return result
+    iv_y_labels = [
+        GenEval.MeasurementHeader.parse_number(l)[0]
+        for l in bib.params.available_measurement_entries_labels
+    ]
+    result["VVI"] = IVEval.Map(
+        x_axis=IVEval.Axis(
+            name="Voltage (V)",
+            values=iv_x,
+        ),
+        y_axis=IVEval.Axis(
+            name="Voltage (V)",
+            values=np.array(iv_y_labels),
+        ),
+        z_axis=IVEval.Axis(
+            name="Current (I)",
+            values=iv_z,
+        ),
+        values=VVI,
+    )
+
+    bib.result.maps = result

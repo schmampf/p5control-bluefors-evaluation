@@ -1,47 +1,30 @@
 from enum import Enum
 
-import logging
+# import logging
+from builtins import print as _print
 
 from integration.files import DataCollection
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-logger = logging.getLogger(__name__)
 
-glob_indent_lvl: int = 0
-local_indent_lvl: int = 0
-anchor: list[int] = []
-bib: DataCollection = DataCollection()
-suppress_print: bool = False
-
-
-class LogLevel(Enum):
-    CRITICAL = logging.CRITICAL
-    ERROR = logging.ERROR
-    WARNING = logging.WARNING
-    INFO = logging.INFO
-    DEBUG = logging.DEBUG
-    NOTSET = logging.NOTSET
+# region logging levels
+class Level(Enum):
+    CRITICAL = 0
+    ERROR = 1
+    WARNING = 2
+    INFO = 3
+    DEBUG = 4
+    NOTSET = 5
 
 
-CRITICAL = LogLevel.CRITICAL
-ERROR = LogLevel.ERROR
-WARNING = LogLevel.WARNING
-INFO = LogLevel.INFO
-DEBUG = LogLevel.DEBUG
+CRITICAL = Level.CRITICAL
+ERROR = Level.ERROR
+WARNING = Level.WARNING
+INFO = Level.INFO
+DEBUG = Level.DEBUG
+# endregion
 
 
-def setup(nbib: DataCollection) -> None:
-    global bib
-    bib = nbib
-    print(INFO, START, "Logger.setup()")
-
-
-def set_level(level: LogLevel) -> None:
-    """Set the logging level."""
-    logger.setLevel(level.value)
-    print(INFO, START, "Logger.set_level()")
-
-
+# region indentation
 class Indent(Enum):
     START = 0
     KEEP = 1
@@ -55,39 +38,64 @@ KEEP = Indent.KEEP
 END = Indent.END
 INC = Indent.INC
 RESET = Indent.RESET
+# endregion
+
+bib: DataCollection = DataCollection()
+suppress_print: bool = False
+level: Level = Level.NOTSET
+
+cache: str = ""
+
+glob_indent_lvl: int = 0
+# local_indent_lvl: int = 0
+# anchor: list[int] = []
 
 
-def print(plevel: LogLevel, nextIndent: Indent = KEEP, msg: str = "") -> None:
+def setup(nbib: DataCollection):
+    """Set up the logger with the given DataCollection."""
+    global bib
+    bib = nbib
+    print(INFO, START, "Logger.setup()")
+
+
+def set_level(nlevel: Level):
+    """Set the logging level."""
+    global level
+    level = nlevel
+    print(INFO, START, f"Logger.set_level(lvl={nlevel})")
+
+
+def print(
+    plevel: Level,
+    nextIndent: Indent = KEEP,
+    msg: str = "",
+    force: bool = False,
+    updating: bool = False,
+):
     """Print a message with the specified logging level and indentation."""
+    global level
     global glob_indent_lvl
-    global local_indent_lvl
-    global anchor
-    global data
     global suppress_print
+    global cache
 
-    if suppress_print:
+    if suppress_print and not force or plevel.value > level.value:
         return
 
-    # if cascade:
-    #     temp = last_anchor.pop() if last_anchor else 0
-    #     last_anchor.append(glob_indent_lvl)
-    #     glob_indent_lvl = temp
-
-    if nextIndent == Indent.START:
+    if nextIndent == START:
         glob_indent_lvl = 0
 
-    # if nextIndent == Indent.INC:
-    #     glob_indent_lvl += 2
-
-    # if nextIndent == Indent.RESET:
-    #     glob_indent_lvl = last_anchor.pop() if last_anchor else 0
-
+    indent = " " * glob_indent_lvl
     name = bib.data.name if not bib.data.name == "default" else "..."
-    logger.log(plevel.value, "(%s) %s%s", name, " " * glob_indent_lvl, msg)
+    fmsg = f"({name}){indent} {msg}"
 
-    # if plevel == LogLevel.DEBUG:
-    #     glob_indent_lvl += 2
-    # else:
+    if updating:
+        _print(f"\r{len(cache) * ' '}", end="")
+        _print(f"\r{fmsg}", end="")
+    else:
+        _print(fmsg)
+
+    cache = fmsg
+
     glob_indent_lvl = 2
 
     if nextIndent == Indent.END:
