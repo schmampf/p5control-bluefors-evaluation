@@ -68,8 +68,9 @@ class BaseEvaluation(BaseClass):
         Parameters:
         - name (str): A name for the evaluation instance.
         """
-        super().__init__()
         self._base_eva_name = name
+
+        BaseClass.__init__(self)
 
         # initialize key lists
         self.possible_measurement_keys = POSSIBLE_MEASUREMENT_KEYS
@@ -160,9 +161,9 @@ class BaseEvaluation(BaseClass):
         file_name = self.file_directory + self.file_folder + self.file_name
         with File(file_name, "r") as data_file:
             measurements = list(data_file["measurement"].keys())  # type: ignore
-            logger.info(
-                "(%s) Available measurements: %s", self._base_eva_name, measurements
-            )
+            logger.info("(%s) Available measurements:", self._base_eva_name)
+            for m in measurements:
+                logger.info("%s", m)
 
     def setMeasurement(self, measurement_key: str) -> None:
         """
@@ -214,7 +215,7 @@ class BaseEvaluation(BaseClass):
         y_value : float
             The corresponding y-value to store.
         """
-        logger.info("(%s) addKey('%s', %f)", self._base_eva_name, key, y_value)
+        logger.debug("(%s) addKey('%s', %f)", self._base_eva_name, key, y_value)
 
         self.specific_keys.append(key)
         self.y_unsorted = np.concatenate((self.y_unsorted, [y_value]))
@@ -228,7 +229,7 @@ class BaseEvaluation(BaseClass):
         key : str
             The measurement key to remove.
         """
-        logger.info("(%s) removeKey('%s')", self._base_eva_name, key)
+        logger.debug("(%s) removeKey('%s')", self._base_eva_name, key)
 
         try:
             self.specific_keys.remove(key)
@@ -265,7 +266,7 @@ class BaseEvaluation(BaseClass):
         to_pop : str
             key to pop
         """
-        logger.info(
+        logger.debug(
             "(%s) setKeys(%s, %s, %s, %s)",
             self._base_eva_name,
             index_0,

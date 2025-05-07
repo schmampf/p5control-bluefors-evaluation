@@ -29,6 +29,7 @@ import pickle
 import matplotlib
 import matplotlib.figure
 
+from utilities import baseclass
 from utilities.baseclass import BaseClass
 
 
@@ -57,8 +58,8 @@ class BasePlot(BaseClass):
         Parameters:
         - name (str): The name of the plot instance (default: "base plot").
         """
-        super().__init__()
         self._base_plot_name = name
+        BaseClass.__init__(self)
 
         self.save_as_png: bool = True
         self.save_as_fig: bool = False
