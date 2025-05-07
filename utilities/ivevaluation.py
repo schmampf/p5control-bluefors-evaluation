@@ -76,7 +76,7 @@ class IVEvaluation(BaseEvaluation):
         Description
         """
         self._iv_eva_name: str = name
-        super().__init__()
+        BaseEvaluation.__init__(self)
 
         self.mapped = {
             "y_axis": np.array([]),
@@ -732,16 +732,27 @@ class IVEvaluation(BaseEvaluation):
             y_bounds,
             dictionary,
         )
+        # if y_bounds:
+        #     lower, upper = y_bounds
+        #     indices = indices[lower:upper]
 
         # Sort time-related entries in the dictionary
+        # sorted_data = [data[i] for i in sorted_indices]
+
+        dictionary["iv_tuples"] = [dictionary["iv_tuples"][i] for i in indices]
+        dictionary["iv_tuples_raw"] = [dictionary["iv_tuples_raw"][i] for i in indices]
         dictionary["time_start"] = dictionary["time_start"][indices]
         dictionary["time_stop"] = dictionary["time_stop"][indices]
+        dictionary["downsample_frequency"] = dictionary["downsample_frequency"][indices]
 
         # Apply optional y-axis bounds for time
         if y_bounds:
             lower, upper = y_bounds
             dictionary["time_start"] = dictionary["time_start"][lower:upper]
             dictionary["time_stop"] = dictionary["time_stop"][lower:upper]
+            dictionary["downsample_frequency"] = dictionary["downsample_frequency"][
+                lower:upper
+            ]
 
         # Sort current-related data if eva_current is True
         if self.eva_current:
@@ -972,7 +983,7 @@ class IVEvaluation(BaseEvaluation):
             Each dictionary contains mapped results (I, V, dI/dV, temperature, etc.)
             for one trigger index.
         """
-        logger.info("(%s) getMaps()", self._iv_eva_name)
+        logger.debug("(%s) getMaps()", self._iv_eva_name)
 
         # Allocate voltage offset arrays, one per y-position
         len_y = np.shape(self.y_unsorted)[0]
