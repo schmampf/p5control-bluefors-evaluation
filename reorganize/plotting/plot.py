@@ -20,6 +20,7 @@ class StyleKeys(Enum):
     Y_LABEL = auto()
     Z_LABEL = auto()
 
+    SCALE = auto()
     X_LIM = auto()
     Y_LIM = auto()
     Z_LIM = auto()
@@ -35,6 +36,7 @@ class StyleKeys(Enum):
 X_LABEL = StyleKeys.X_LABEL
 Y_LABEL = StyleKeys.Y_LABEL
 Z_LABEL = StyleKeys.Z_LABEL
+SCALE = StyleKeys.SCALE
 X_LIM = StyleKeys.X_LIM
 Y_LIM = StyleKeys.Y_LIM
 Z_LIM = StyleKeys.Z_LIM
@@ -94,11 +96,26 @@ def map(bib: DataCollection, type: list[str], styling: list[dict[StyleKeys, Any]
 
     for i, t in enumerate(type):
         match t:
-            case "VVI":
+            case "VXI" | "IXV" | "dIXR" | "dVXC":
+                Logger.print(
+                    Logger.DEBUG,
+                    msg=f"Plotting map: {t}",
+                )
+
                 style = styling[i]
-                map = bib.result.maps["VVI"]
-                xcoords = map.x_axis.values
-                ycoords = map.y_axis.values
+                map_def = bib.result.maps[t]
+                xcoords_def = map_def.x_axis.values
+                ycoords_def = map_def.y_axis.values
+
+                xcoords = xcoords_def.copy()
+                ycoords = ycoords_def.copy()
+                map = map_def.copy()
+
+                scale = style.get(SCALE)
+                if scale is not None:
+                    xcoords = xcoords_def * scale[0]
+                    ycoords = ycoords_def * scale[1]
+                    map.values = map_def.values * scale[2]
 
                 plt.imshow(
                     map.values,
@@ -112,53 +129,30 @@ def map(bib: DataCollection, type: list[str], styling: list[dict[StyleKeys, Any]
                         ycoords[-1],
                     ),
                 )
-                # region labels
-                plt.xlabel(style.get(X_LABEL) or map.x_axis.name)
-                plt.ylabel(style.get(Y_LABEL) or map.y_axis.name)
-                if style.get(CBAR, False):
-                    plt.colorbar(label=style.get(Z_LABEL, map.z_axis.name))
-                # endregion
-                # region lims
-                if style.get(X_LIM):
-                    plt.xlim(style.get(X_LIM))
-                if style.get(Y_LIM):
-                    plt.ylim(style.get(Y_LIM))
-                if style.get(Z_LIM):
-                    plt.clim(style.get(Z_LIM))
-                # endregion
-                # region ticks
-                ticks = style.get(TICKS)
-                if ticks:
-                    plt.locator_params(axis="x", nbins=ticks[0])
-                    plt.locator_params(axis="y", nbins=ticks[1])
-                    # if style.get(CBAR, False):
-                    #     cbar = plt.colorbar(label=style.get(Z_LABEL, map.z_axis.name))
-                    #     cbar_ticks = style.get("CBAR_TICKS")  # Add a key for color bar ticks
-                    #     if cbar_ticks:
-                    #         cbar.set_ticks(np.linspace(cbar.vmin, cbar.vmax, cbar_ticks))
 
-                # endregion
+                style_map(map, style)
 
     plt.show()
 
 
-def get_unit(name: str) -> str:
-    """
-    Get the unit of a given name.
-    """
-    if name == "current":
-        return "A"
-    elif name == "voltage":
-        return "V"
-    elif name == "time":
-        return "s"
-    else:
-        return ""
-
-
-def unpack_style(
-    style: dict[str, str],
-):
-    plt.xlabel(style.get("x-axis", "err"))
-    plt.ylabel(style.get("y-axis", "err"))
-    plt.colorbar(label=style.get("z-axis", "err"))
+def style_map(map, style: dict[StyleKeys, Any]):
+    # region labels
+    plt.xlabel(style.get(X_LABEL) or map.x_axis.name)
+    plt.ylabel(style.get(Y_LABEL) or map.y_axis.name)
+    if style.get(CBAR, False):
+        plt.colorbar(label=style.get(Z_LABEL, map.z_axis.name))
+    # endregion
+    # region lims
+    if style.get(X_LIM):
+        plt.xlim(style.get(X_LIM))
+    if style.get(Y_LIM):
+        plt.ylim(style.get(Y_LIM))
+    if style.get(Z_LIM):
+        plt.clim(style.get(Z_LIM))
+    # endregion
+    # region ticks
+    ticks = style.get(TICKS)
+    if ticks:
+        plt.locator_params(axis="x", nbins=ticks[0])
+        plt.locator_params(axis="y", nbins=ticks[1])
+    # endregion

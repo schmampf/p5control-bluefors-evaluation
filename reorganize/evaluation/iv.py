@@ -52,7 +52,13 @@ class Axis:
     def bins(self):
         if len(self.values) == 0:
             return 0
-        return len(self.values) - 1
+        return len(self.values)
+
+    def copy(self) -> "Axis":
+        new_axis = Axis()
+        new_axis.name = self.name
+        new_axis.values = self.values.copy()
+        return new_axis
 
 
 @dataclass
@@ -71,7 +77,7 @@ class Curve:
         if name == "values":
             if len(value) != self.dependent_ax.bins:
                 raise ValueError(
-                    f"Values must have the same length as the number of bins ({self.dependent_ax.bins})."
+                    f"Values must have the same length as the number of bins. Is:({len(value)}) Req:({self.dependent_ax.bins})."
                 )
         super().__setattr__(name, value)
 
@@ -137,6 +143,15 @@ class Map:
             self.values = np.full(
                 (self.x_axis.bins, self.y_axis.bins), np.nan, dtype=np.float64
             )
+
+    def copy(self) -> "Map":
+        new_map = Map()
+        new_map.name = self.name
+        new_map.x_axis = self.x_axis.copy()
+        new_map.y_axis = self.y_axis.copy()
+        new_map.z_axis = self.z_axis.copy()
+        new_map.values = self.values.copy()
+        return new_map
 
 
 @dataclass
@@ -402,21 +417,23 @@ def process_curve_sets(
     )
     set = collection.evaluation.cached_sets
 
-    conductance_quantum = constants.physical_constants["conductance quantum"][0]
+    G_0 = constants.physical_constants["conductance quantum"][0]
 
-    diff_conductance = (
-        np.gradient(set["adwin"].curves["current"], set["adwin"].curves["voltage"])
-        / conductance_quantum
-    )
-    diff_resistance = np.gradient(
-        set["adwin"].curves["voltage"], set["adwin"].curves["current"]
-    )
-    temp = np.nanmean(set["bluefors"].curves["temperature"])
+    c_bins = set["adwin"].curves["current-bin"]
+    c_binned = set["adwin"].curves["current-voltage"]
+    v_bins = set["adwin"].curves["voltage-bin"]
+    v_binned = set["adwin"].curves["voltage-current"]
+
+    diff_resistance = np.gradient(v_binned, c_bins)
+    diff_conductance = np.gradient(c_binned, v_bins) / G_0
+
+    temps = set["bluefors"].curves["temperature"]
+    temp = np.nanmean(temps)
 
     diffs = DataSet()
     diffs.curves["diff_conductance"] = diff_conductance
     diffs.curves["diff_resistance"] = diff_resistance
-    diffs.curves["temperature"] = temp
+    diffs.curves["mean_temp"] = temp
 
     collection.evaluation.cached_sets["diffs"] = diffs
 

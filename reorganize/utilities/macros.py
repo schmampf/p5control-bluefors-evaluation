@@ -38,9 +38,13 @@ def bulk_eval(bib: DataCollection):
     result = {}
     num_slices = bib.params.available_measurement_entries
     slice_index = np.linspace(0, num_slices - 1, num_slices, dtype=int)
-    init: bool = False
 
-    VVI = np.empty((num_slices, 0), dtype=float)
+    VXI = np.empty((num_slices, bib.iv_params.bins), dtype=float)
+    IXV = np.empty((num_slices, bib.iv_params.bins), dtype=float)
+    dIXR = np.empty((num_slices, bib.iv_params.bins), dtype=float)
+    dVXC = np.empty((num_slices, bib.iv_params.bins), dtype=float)
+
+    TX = np.empty((num_slices, 1), dtype=float)
 
     Logger.suppress_print = True
     for i in slice_index:
@@ -55,34 +59,84 @@ def bulk_eval(bib: DataCollection):
         eval(bib, "adwin")
         eval(bib, "bluefors")
 
-        iv_x = bib.evaluation.cached_sets["adwin"].curves["voltage-bin"]
-        iv_z = bib.evaluation.cached_sets["adwin"].curves["current-voltage"]
+        t_b = bib.evaluation.cached_sets["adwin"].curves["time-bin"]
+        v_b = bib.evaluation.cached_sets["adwin"].curves["voltage-bin"]
+        i_b = bib.evaluation.cached_sets["adwin"].curves["current-bin"]
+        temp_b = bib.evaluation.cached_sets["bluefors"].curves["temperature"]
 
-        if not init:
-            VVI = np.empty((num_slices, iv_x.size), dtype=float)
-            init = True
+        iv = bib.evaluation.cached_sets["adwin"].curves["current-voltage"]
+        vi = bib.evaluation.cached_sets["adwin"].curves["voltage-current"]
+        d_res = bib.evaluation.cached_sets["diffs"].curves["diff_resistance"]
+        d_cond = bib.evaluation.cached_sets["diffs"].curves["diff_conductance"]
+        m_temp = bib.evaluation.cached_sets["diffs"].curves["mean_temp"]
 
-        VVI[i, :] = np.gradient(np.array(iv_z, dtype=float))
+        VXI[i, :] = np.array(iv, dtype=float)
+        IXV[i, :] = np.array(vi, dtype=float)
+        dIXR[i, :] = np.array(d_res, dtype=float)
+        dVXC[i, :] = np.array(d_cond, dtype=float)
+
+        TX[i, 0] = np.array(m_temp, dtype=float)
     Logger.suppress_print = False
 
-    iv_y_labels = [
+    y_labels = [
         GenEval.MeasurementHeader.parse_number(l)[0]
         for l in bib.params.available_measurement_entries_labels
     ]
-    result["VVI"] = IVEval.Map(
+
+    result["VXI"] = IVEval.Map(
         x_axis=IVEval.Axis(
-            name="Voltage (V)",
-            values=iv_x,
+            name=r"Voltage ($V$)",
+            values=v_b,
         ),
         y_axis=IVEval.Axis(
-            name="Voltage (V)",
-            values=np.array(iv_y_labels),
+            name="X",
+            values=np.array(y_labels),
         ),
-        z_axis=IVEval.Axis(
-            name="Current (I)",
-            values=iv_z,
+        z_axis=IVEval.Axis(name=r"Current ($I$)"),
+        values=VXI,
+    )
+    result["IXV"] = IVEval.Map(
+        x_axis=IVEval.Axis(
+            name=r"Current ($I$)",
+            values=i_b,
         ),
-        values=VVI,
+        y_axis=IVEval.Axis(
+            name="X",
+            values=np.array(y_labels),
+        ),
+        z_axis=IVEval.Axis(name=r"Voltage ($V$)"),
+        values=IXV,
+    )
+    result["dIXR"] = IVEval.Map(
+        x_axis=IVEval.Axis(
+            name=r"Current ($I$)",
+            values=i_b,
+        ),
+        y_axis=IVEval.Axis(
+            name="X",
+            values=np.array(y_labels),
+        ),
+        z_axis=IVEval.Axis(name=r"d$V$/d$I$ ($O$)"),
+        values=dIXR,
+    )
+    result["dVXC"] = IVEval.Map(
+        x_axis=IVEval.Axis(
+            name=r"Voltage (V)",
+            values=v_b,
+        ),
+        y_axis=IVEval.Axis(
+            name="X",
+            values=np.array(y_labels),
+        ),
+        z_axis=IVEval.Axis(name=r"d$I$/d$V$ ($G_0$)"),
+        values=dVXC,
     )
 
+    result["TX"] = IVEval.Curve(
+        dependent_ax=IVEval.Axis(
+            name="X",
+            values=np.array(y_labels),
+        ),
+        values=TX,
+    )
     bib.result.maps = result
