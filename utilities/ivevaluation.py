@@ -72,11 +72,42 @@ class IVEvaluation(BaseEvaluation):
         self,
         name: str = "iv eva",
     ):
-        # self._iv_eva_name: str = name
-        # super().__init__()
+        """
+        Description
+        """
+        self._iv_eva_name: str = name
+        BaseEvaluation.__init__(self)
 
-        # self.mapped = {
-        # }
+        self.mapped = {
+            "y_axis": np.array([]),
+            "voltage_offset_1": np.array([]),
+            "voltage_offset_2": np.array([]),
+            "downsample_frequency": 3,
+            "voltage_minimum": np.nan,
+            "voltage_maximum": np.nan,
+            "voltage_bins": np.nan,
+            "voltage_axis": np.array([]),
+            "current_minimum": np.nan,
+            "current_maximum": np.nan,
+            "current_bins": np.nan,
+            "current_axis": np.array([]),
+            "amplitude_minimum": np.nan,
+            "amplitude_maximum": np.nan,
+            "amplitude_bins": np.nan,
+            "amplitude_axis": np.array([]),
+            "temperature_minimum": np.nan,
+            "temperature_maximum": np.nan,
+            "temperature_bins": np.nan,
+            "temperature_axis": np.array([]),
+            "upsample_current": 137,
+            "upsample_voltage": 137,
+            "upsample_amplitude": 0,
+            "upsample_temperature": 0,
+            "eva_current": True,
+            "eva_voltage": True,
+            "eva_temperature": True,
+            "eva_even_spaced": False,
+        }
 
         self.index_trigger: int = 1
         self.evaluated = self.get_empty_dictionary()
@@ -84,12 +115,12 @@ class IVEvaluation(BaseEvaluation):
         self.up_sweep = self.get_empty_dictionary()
         self.down_sweep = self.get_empty_dictionary()
 
-        # self.setV(2.0e-3, voltage_bins=100)
-        # self.setI(1.0e-6, current_bins=100)
-        # self.setA(0, 1, 500)
-        # self.setT(0, 1.5, 500)
+        self.setV(2.0e-3, voltage_bins=100)
+        self.setI(1.0e-6, current_bins=100)
+        self.setA(0, 1, 500)
+        self.setT(0, 1.5, 500)
 
-        # logger.info("(%s) ... IVEvaluation initialized.", self._iv_eva_name)
+        logger.info("(%s) ... IVEvaluation initialized.", self._iv_eva_name)
 
     def get_empty_dictionary(self, len_y: int = 0):
         logger.debug("(%s) get_empty_dictionary(len_y=%s)", self._iv_eva_name, len_y)
@@ -121,13 +152,191 @@ class IVEvaluation(BaseEvaluation):
             "voltage": np.full((len_y, len_i), np.nan, dtype="float64"),
             "time_current": np.full((len_y, len_v), np.nan, dtype="float64"),
             "time_voltage": np.full((len_y, len_i), np.nan, dtype="float64"),
-            # "temperature_current": np.full((len_y, len_v), np.nan, dtype="float64"),
-            # "temperature_voltage": np.full((len_y, len_i), np.nan, dtype="float64"),
-            # "differential_conductance": np.full(
-            #     (len_y, len_v), np.nan, dtype="float64"
-            # ),
-            # "differential_resistance": np.full((len_y, len_i), np.nan, dtype="float64"),
+            "temperature_current": np.full((len_y, len_v), np.nan, dtype="float64"),
+            "temperature_voltage": np.full((len_y, len_i), np.nan, dtype="float64"),
+            "differential_conductance": np.full(
+                (len_y, len_v), np.nan, dtype="float64"
+            ),
+            "differential_resistance": np.full((len_y, len_i), np.nan, dtype="float64"),
         }
+
+    def setV(
+        self,
+        voltage_absolute: float = np.nan,
+        voltage_minimum: float = np.nan,
+        voltage_maximum: float = np.nan,
+        voltage_bins: int = 0,
+    ):
+        """
+        Sets the voltage-axis.
+
+        Parameters
+        ----------
+        voltage_absolute : float, optional
+            If provided, sets voltage_minimum and voltage_maximum symmetrically.
+        voltage_minimum : float, optional
+            Minimum voltage value.
+        voltage_maximum : float, optional
+            Maximum voltage value.
+        voltage_bins : float, optional
+            Number of bins minus 1.
+        """
+
+        if not np.isnan(voltage_absolute):
+            voltage_minimum = -voltage_absolute
+            voltage_maximum = +voltage_absolute
+
+        if not np.isnan(voltage_minimum):
+            self.voltage_minimum = voltage_minimum
+        if not np.isnan(voltage_maximum):
+            self.voltage_maximum = voltage_maximum
+        if voltage_bins:
+            self.voltage_bins = voltage_bins
+
+        # Calculate new voltage axis.
+        self.voltage_axis = np.linspace(
+            self.voltage_minimum,
+            self.voltage_maximum,
+            self.voltage_bins + 1,
+        )
+
+        logger.debug(
+            "(%s) setV(%s, %s, %s)",
+            self._iv_eva_name,
+            self.voltage_minimum,
+            self.voltage_maximum,
+            self.voltage_bins,
+        )
+
+    def setI(
+        self,
+        current_absolute: float = np.nan,
+        current_minimum: float = np.nan,
+        current_maximum: float = np.nan,
+        current_bins: int = 0,
+    ):
+        """
+        Sets the current-axis.
+
+        Parameters
+        ----------
+        current_absolute : float, optional
+            If provided, sets current_minimum and current_maximum symmetrically.
+        current_minimum : float, optional
+            Minimum current value.
+        current_maximum : float, optional
+            Maximum current value.
+        current_bins : float, optional
+            Number of bins minus 1.
+        """
+
+        if not np.isnan(current_absolute):
+            current_minimum = -current_absolute
+            current_maximum = +current_absolute
+
+        if not np.isnan(current_minimum):
+            self.current_minimum = current_minimum
+        if not np.isnan(current_maximum):
+            self.current_maximum = current_maximum
+        if current_bins:
+            self.current_bins = current_bins
+
+        # Calculate new current axis.
+        self.current_axis = np.linspace(
+            self.current_minimum,
+            self.current_maximum,
+            self.current_bins + 1,
+        )
+
+        logger.debug(
+            "(%s) setI(%s, %s, %s)",
+            self._iv_eva_name,
+            self.current_minimum,
+            self.current_maximum,
+            self.current_bins,
+        )
+
+    def setA(
+        self,
+        amplitude_minimum: float = np.nan,
+        amplitude_maximum: float = np.nan,
+        amplitude_bins: int = 0,
+    ):
+        """
+        Sets the amplitude-axis.
+
+        Parameters
+        ----------
+        amplitude_minimum : float, optional
+            Minimum amplitude value.
+        amplitude_maximum : float, optional
+            Maximum amplitude value.
+        amplitude_bins : float, optional
+            Number of bins minus 1.
+        """
+
+        if not np.isnan(amplitude_minimum):
+            self.amplitude_minimum = amplitude_minimum
+        if not np.isnan(amplitude_maximum):
+            self.amplitude_maximum = amplitude_maximum
+        if amplitude_bins:
+            self.amplitude_bins = amplitude_bins
+
+        # Calculate new amplitude axis.
+        self.amplitude_axis = np.linspace(
+            self.amplitude_minimum,
+            self.amplitude_maximum,
+            self.amplitude_bins + 1,
+        )
+
+        logger.debug(
+            "(%s) setA(%s, %s, %s)",
+            self._iv_eva_name,
+            self.amplitude_minimum,
+            self.amplitude_maximum,
+            self.amplitude_bins,
+        )
+
+    def setT(
+        self,
+        temperature_minimum: float = np.nan,
+        temperature_maximum: float = np.nan,
+        temperature_bins: int = 0,
+    ):
+        """
+        Sets the temperature-axis.
+
+        Parameters
+        ----------
+        temperature_minimum : float, optional
+            Minimum temperature value.
+        temperature_maximum : float, optional
+            Maximum temperature value.
+        temperature_bins : float, optional
+            Number of bins minus 1.
+        """
+
+        if not np.isnan(temperature_minimum):
+            self.temperature_minimum = temperature_minimum
+        if not np.isnan(temperature_maximum):
+            self.temperature_maximum = temperature_maximum
+        if temperature_bins:
+            self.temperature_bins = temperature_bins
+
+        # Calculate new temperature axis.
+        self.temperature_axis = np.linspace(
+            self.temperature_minimum,
+            self.temperature_maximum,
+            self.temperature_bins + 1,
+        )
+
+        logger.debug(
+            "(%s) setT(%s, %s, %s)",
+            self._iv_eva_name,
+            self.temperature_minimum,
+            self.temperature_maximum,
+            self.temperature_bins,
+        )
 
     # endregion
 
@@ -523,16 +732,27 @@ class IVEvaluation(BaseEvaluation):
             y_bounds,
             dictionary,
         )
+        # if y_bounds:
+        #     lower, upper = y_bounds
+        #     indices = indices[lower:upper]
 
         # Sort time-related entries in the dictionary
+        # sorted_data = [data[i] for i in sorted_indices]
+
+        dictionary["iv_tuples"] = [dictionary["iv_tuples"][i] for i in indices]
+        dictionary["iv_tuples_raw"] = [dictionary["iv_tuples_raw"][i] for i in indices]
         dictionary["time_start"] = dictionary["time_start"][indices]
         dictionary["time_stop"] = dictionary["time_stop"][indices]
+        dictionary["downsample_frequency"] = dictionary["downsample_frequency"][indices]
 
         # Apply optional y-axis bounds for time
         if y_bounds:
             lower, upper = y_bounds
             dictionary["time_start"] = dictionary["time_start"][lower:upper]
             dictionary["time_stop"] = dictionary["time_stop"][lower:upper]
+            dictionary["downsample_frequency"] = dictionary["downsample_frequency"][
+                lower:upper
+            ]
 
         # Sort current-related data if eva_current is True
         if self.eva_current:
@@ -763,7 +983,7 @@ class IVEvaluation(BaseEvaluation):
             Each dictionary contains mapped results (I, V, dI/dV, temperature, etc.)
             for one trigger index.
         """
-        logger.info("(%s) getMaps()", self._iv_eva_name)
+        logger.debug("(%s) getMaps()", self._iv_eva_name)
 
         # Allocate voltage offset arrays, one per y-position
         len_y = np.shape(self.y_unsorted)[0]
@@ -923,5 +1143,293 @@ class IVEvaluation(BaseEvaluation):
                 )
 
         return tuple(evaluated)
+
+    # endregion
+
+    # region iv properties
+
+    @property
+    def eva_current(self):
+        """Get the value of eva_current."""
+        return self.mapped["eva_current"]
+
+    @eva_current.setter
+    def eva_current(self, eva_current):
+        """Set the value of eva_current."""
+        self.mapped["eva_current"] = eva_current
+        logger.debug("(%s) eva_current = %s", self._iv_eva_name, eva_current)
+
+    @property
+    def eva_voltage(self):
+        """Get the value of eva_voltage."""
+        return self.mapped["eva_voltage"]
+
+    @eva_voltage.setter
+    def eva_voltage(self, eva_voltage):
+        """Set the value of eva_voltage."""
+        self.mapped["eva_voltage"] = eva_voltage
+        logger.debug("(%s) eva_voltage = %s", self._iv_eva_name, eva_voltage)
+
+    @property
+    def eva_temperature(self):
+        """Get the value of eva_temperature."""
+        return self.mapped["eva_temperature"]
+
+    @eva_temperature.setter
+    def eva_temperature(self, eva_temperature):
+        """Set the value of eva_temperature."""
+        self.mapped["eva_temperature"] = eva_temperature
+        logger.debug("(%s) eva_temperature = %s", self._iv_eva_name, eva_temperature)
+
+    @property
+    def eva_even_spaced(self):
+        """Get the value of eva_even_spaced."""
+        return self.mapped["eva_even_spaced"]
+
+    @eva_even_spaced.setter
+    def eva_even_spaced(self, eva_even_spaced):
+        """Set the value of eva_even_spaced."""
+        self.mapped["eva_even_spaced"] = eva_even_spaced
+        logger.debug("(%s) eva_even_spaced = %s", self._iv_eva_name, eva_even_spaced)
+
+    @property
+    def voltage_offset_1(self):
+        """Get the value of voltage_offset_1."""
+        return self.mapped["voltage_offset_1"]
+
+    @voltage_offset_1.setter
+    def voltage_offset_1(self, voltage_offset_1):
+        """Set the value of voltage_offset_1."""
+        self.mapped["voltage_offset_1"] = voltage_offset_1
+
+    @property
+    def voltage_offset_2(self):
+        """Get the value of voltage_offset_2."""
+        return self.mapped["voltage_offset_2"]
+
+    @voltage_offset_2.setter
+    def voltage_offset_2(self, voltage_offset_2):
+        """Set the value of voltage_offset_2."""
+        self.mapped["voltage_offset_2"] = voltage_offset_2
+
+    @property
+    def y_axis(self):
+        """Get the value of y_axis."""
+        return self.mapped["y_axis"]
+
+    @y_axis.setter
+    def y_axis(self, y_axis):
+        """Set the value of y_axis."""
+        self.mapped["y_axis"] = y_axis
+
+    @property
+    def downsample_frequency(self):
+        """Get the value of downsample_frequency."""
+        return self.mapped["downsample_frequency"]
+
+    @downsample_frequency.setter
+    def downsample_frequency(self, downsample_frequency):
+        """Set the value of downsample_frequency."""
+        self.mapped["downsample_frequency"] = downsample_frequency
+
+    @property
+    def voltage_minimum(self):
+        """Get the value of voltage_minimum."""
+        return self.mapped["voltage_minimum"]
+
+    @voltage_minimum.setter
+    def voltage_minimum(self, voltage_minimum):
+        """Set the value of voltage_minimum."""
+        self.mapped["voltage_minimum"] = voltage_minimum
+
+    @property
+    def voltage_maximum(self):
+        """Get the value of voltage_maximum."""
+        return self.mapped["voltage_maximum"]
+
+    @voltage_maximum.setter
+    def voltage_maximum(self, voltage_maximum):
+        """Set the value of voltage_maximum."""
+        self.mapped["voltage_maximum"] = voltage_maximum
+
+    @property
+    def voltage_bins(self):
+        """Get the value of voltage_bins."""
+        return self.mapped["voltage_bins"]
+
+    @voltage_bins.setter
+    def voltage_bins(self, voltage_bins):
+        """Set the value of voltage_bins."""
+        self.mapped["voltage_bins"] = voltage_bins
+
+    @property
+    def voltage_axis(self):
+        """Get the value of voltage_axis."""
+        return self.mapped["voltage_axis"]
+
+    @voltage_axis.setter
+    def voltage_axis(self, voltage_axis):
+        """Set the value of voltage_axis."""
+        self.mapped["voltage_axis"] = voltage_axis
+
+    @property
+    def current_minimum(self):
+        """Get the value of current_minimum."""
+        return self.mapped["current_minimum"]
+
+    @current_minimum.setter
+    def current_minimum(self, current_minimum):
+        """Set the value of current_minimum."""
+        self.mapped["current_minimum"] = current_minimum
+
+    @property
+    def current_maximum(self):
+        """Get the value of current_maximum."""
+        return self.mapped["current_maximum"]
+
+    @current_maximum.setter
+    def current_maximum(self, current_maximum):
+        """Set the value of current_maximum."""
+        self.mapped["current_maximum"] = current_maximum
+
+    @property
+    def current_bins(self):
+        """Get the value of current_bins."""
+        return self.mapped["current_bins"]
+
+    @current_bins.setter
+    def current_bins(self, current_bins):
+        """Set the value of current_bins."""
+        self.mapped["current_bins"] = current_bins
+
+    @property
+    def current_axis(self):
+        """Get the value of current_axis."""
+        return self.mapped["current_axis"]
+
+    @current_axis.setter
+    def current_axis(self, current_axis):
+        """Set the value of current_axis."""
+        self.mapped["current_axis"] = current_axis
+
+    @property
+    def amplitude_minimum(self):
+        """Get the value of amplitude_minimum."""
+        return self.mapped["amplitude_minimum"]
+
+    @amplitude_minimum.setter
+    def amplitude_minimum(self, amplitude_minimum):
+        """Set the value of amplitude_minimum."""
+        self.mapped["amplitude_minimum"] = amplitude_minimum
+
+    @property
+    def amplitude_maximum(self):
+        """Get the value of amplitude_maximum."""
+        return self.mapped["amplitude_maximum"]
+
+    @amplitude_maximum.setter
+    def amplitude_maximum(self, amplitude_maximum):
+        """Set the value of amplitude_maximum."""
+        self.mapped["amplitude_maximum"] = amplitude_maximum
+
+    @property
+    def amplitude_bins(self):
+        """Get the value of amplitude_bins."""
+        return self.mapped["amplitude_bins"]
+
+    @amplitude_bins.setter
+    def amplitude_bins(self, amplitude_bins):
+        """Set the value of amplitude_bins."""
+        self.mapped["amplitude_bins"] = amplitude_bins
+
+    @property
+    def amplitude_axis(self):
+        """Get the value of amplitude_axis."""
+        return self.mapped["amplitude_axis"]
+
+    @amplitude_axis.setter
+    def amplitude_axis(self, amplitude_axis):
+        """Set the value of amplitude_axis."""
+        self.mapped["amplitude_axis"] = amplitude_axis
+
+    @property
+    def temperature_minimum(self):
+        """Get the value of temperature_minimum."""
+        return self.mapped["temperature_minimum"]
+
+    @temperature_minimum.setter
+    def temperature_minimum(self, temperature_minimum):
+        """Set the value of temperature_minimum."""
+        self.mapped["temperature_minimum"] = temperature_minimum
+
+    @property
+    def temperature_maximum(self):
+        """Get the value of temperature_maximum."""
+        return self.mapped["temperature_maximum"]
+
+    @temperature_maximum.setter
+    def temperature_maximum(self, temperature_maximum):
+        """Set the value of temperature_maximum."""
+        self.mapped["temperature_maximum"] = temperature_maximum
+
+    @property
+    def temperature_bins(self):
+        """Get the value of temperature_bins."""
+        return self.mapped["temperature_bins"]
+
+    @temperature_bins.setter
+    def temperature_bins(self, temperature_bins):
+        """Set the value of temperature_bins."""
+        self.mapped["temperature_bins"] = temperature_bins
+
+    @property
+    def temperature_axis(self):
+        """Get the value of temperature_axis."""
+        return self.mapped["temperature_axis"]
+
+    @temperature_axis.setter
+    def temperature_axis(self, temperature_axis):
+        """Set the value of temperature_axis."""
+        self.mapped["temperature_axis"] = temperature_axis
+
+    @property
+    def upsample_current(self):
+        """Get the value of upsample_current."""
+        return self.mapped["upsample_current"]
+
+    @upsample_current.setter
+    def upsample_current(self, upsample_current: int):
+        """Set the value of upsample_current."""
+        self.mapped["upsample_current"] = upsample_current
+
+    @property
+    def upsample_voltage(self):
+        """Get the value of upsample_voltage."""
+        return self.mapped["upsample_voltage"]
+
+    @upsample_voltage.setter
+    def upsample_voltage(self, upsample_voltage: int):
+        """Set the value of upsample_voltage."""
+        self.mapped["upsample_voltage"] = upsample_voltage
+
+    @property
+    def upsample_amplitude(self):
+        """Get the value of upsample_amplitude."""
+        return self.mapped["upsample_amplitude"]
+
+    @upsample_amplitude.setter
+    def upsample_amplitude(self, upsample_amplitude: int):
+        """Set the value of upsample_amplitude."""
+        self.mapped["upsample_amplitude"] = upsample_amplitude
+
+    @property
+    def upsample_temperature(self):
+        """Get the value of upsample_temperature."""
+        return self.mapped["upsample_temperature"]
+
+    @upsample_temperature.setter
+    def upsample_temperature(self, upsample_temperature: int):
+        """Set the value of upsample_temperature."""
+        self.mapped["upsample_temperature"] = upsample_temperature
 
     # endregion

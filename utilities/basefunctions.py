@@ -170,9 +170,13 @@ def bin_z_over_y(y: np.ndarray, z: np.ndarray, y_binned: np.ndarray):
 def get_ext(
     x: np.ndarray,
     y: np.ndarray,
-    x_lim: tuple = (None, None),
-    y_lim: tuple = (None, None),
-):
+    x_lim: tuple[float | None, float | None] = (None, None),
+    y_lim: tuple[float | None, float | None] = (None, None),
+) -> tuple[
+    list[float],
+    tuple[float | None, float | None],
+    tuple[float | None, float | None],
+]:
     """
     Calculate Extent, X-Limits and Y-Limits from given x, y, x_lim, y_lim
     Takes into account of pixel dimension and Nones in xy_lim.
@@ -180,12 +184,12 @@ def get_ext(
 
     pixel_width = np.abs(x[-1] - x[-2])
     pixel_height = np.abs(y[-1] - y[-2])
-    ext = (
+    ext = [
         x[0] - pixel_width / 2,
         x[len(x) - 1] + pixel_width / 2,
         y[0] - pixel_height / 2,
         y[len(y) - 1] + pixel_height / 2,
-    )
+    ]
 
     if x_lim[0] is not None:
         new_x_lim_0 = x_lim[0] - pixel_width / 2
@@ -210,7 +214,11 @@ def get_ext(
     return ext, new_x_lim, new_y_lim
 
 
-def get_z_lim(z_values: np.ndarray, z_lim: tuple = (None, None), z_contrast: float = 1):
+def get_z_lim(
+    z_values: np.ndarray,
+    z_lim: tuple[float | None, float | None] = (None, None),
+    z_contrast: float = 1,
+) -> tuple[float | None, float | None]:
     """
     Determines the z-axis limits based on the given `z_lim` values and contrast factor.
 
@@ -232,8 +240,8 @@ def get_z_lim(z_values: np.ndarray, z_lim: tuple = (None, None), z_contrast: flo
     delta_z = np.nanstd(z_values) * z_contrast
     mean_z = np.nanmean(z_values)
 
-    z_lim_0 = z_lim[0] if z_lim[0] is not None else mean_z - delta_z
-    z_lim_1 = z_lim[1] if z_lim[1] is not None else mean_z + delta_z
+    z_lim_0 = z_lim[0] if z_lim[0] is not None else float(mean_z - delta_z)
+    z_lim_1 = z_lim[1] if z_lim[1] is not None else float(mean_z + delta_z)
 
     return z_lim_0, z_lim_1
 

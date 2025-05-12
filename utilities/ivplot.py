@@ -3,10 +3,16 @@ import sys
 import logging
 import importlib
 
+from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib as mpl
 
-
+from sympy import I
+from tqdm import tqdm
+from contextlib import contextmanager
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from utilities.baseplot import BasePlot
 from utilities.ivevaluation import IVEvaluation
 from utilities.basefunctions import get_norm
@@ -26,10 +32,28 @@ logger = logging.getLogger(__name__)
 from scipy.signal import savgol_filter
 from scipy.interpolate import NearestNDInterpolator
 
+
+# Increase the limit
+# Or disable the warning entirely
+mpl.rcParams["figure.max_open_warning"] = 0
+
 # endregion
 
 
 # region functions
+
+
+@contextmanager
+def suppress_logging():
+    logger = logging.getLogger()
+    original_level = logger.level
+    logger.setLevel(logging.CRITICAL)
+    try:
+        yield
+    finally:
+        logger.setLevel(original_level)
+
+
 def do_smoothing(data: np.ndarray, window_length: int = 20, polyorder: int = 2):
     is_nan = np.isnan(data)
     mask = np.where(np.logical_not(is_nan))
@@ -56,8 +80,11 @@ class IVPlot(IVEvaluation, BasePlot):
         self,
         name: str = "iv plot",
     ):
-        super().__init__()
         self._iv_plot_name = name
+
+        # Initialize both parental classes
+        IVEvaluation.__init__(self)
+        BasePlot.__init__(self)
 
         self.to_plot = self.get_empty_dictionary()
         self.title_of_plot = ""
@@ -67,14 +94,75 @@ class IVPlot(IVEvaluation, BasePlot):
             "fig_size": (6, 4),
             "dpi": 100,
             "cmap": cmap(bad="grey"),
-            "smoothing": True,
+            "smoothing": False,
             "window_length": 20,
             "polyorder": 2,
         }
 
-        logger.info("(%s) ... BasePlot initialized.", self._iv_plot_name)
+        self.plot_ivs = False
+        self.plot_didvs = True
+        self.plot_dvdis = True
+        self.plot_T = True
+        self.plot_index = 0
+        self.contrast = 1
+
+        self.plot_down_sweep = False
+
+        self.y_lim: tuple[float | None, float | None] = (None, None)
+        self.i_lim: tuple[float | None, float | None] = (None, None)
+        self.v_lim: tuple[float | None, float | None] = (None, None)
+        self.t_lim: tuple[float | None, float | None] = (None, None)
+        self.T_lim: tuple[float | None, float | None] = (None, None)
+        self.didv_lim: tuple[float | None, float | None] = (None, None)
+        self.dvdi_lim: tuple[float | None, float | None] = (None, None)
+        self.didv_c_lim: tuple[float | None, float | None] = (None, None)
+        self.dvdi_c_lim: tuple[float | None, float | None] = (None, None)
+
+        self.y_norm: tuple[float, str] | None = None
+        self.i_norm: tuple[float, str] | None = None
+        self.v_norm: tuple[float, str] | None = None
+        self.t_norm: tuple[float, str] | None = None
+        self.T_norm: tuple[float, str] | None = None
+        self.didv_norm: tuple[float, str] | None = None
+        self.dvdi_norm: tuple[float, str] | None = None
+
+        logger.info("(%s) ... IVPlot initialized.", self._iv_plot_name)
 
     # region get data
+
+    def loadData(self):
+        # Call the parent class's loadData method
+        super().loadData()
+
+        if not self.plot_down_sweep:
+            self.to_plot = self.up_sweep
+            self.title_of_plot = "Up Sweep"
+        else:
+            self.to_plot = self.down_sweep
+            self.title_of_plot = "Down Sweep"
+
+    def get_y_len(self):
+        return self.mapped["y_axis"].shape[0]
+
+    def get_y(
+        self,
+        index: int = 0,
+        plain: bool = False,
+    ):
+        if plain:
+            return np.nan
+        else:
+            return self.mapped["y_axis"][index]
+
+    def get_T(
+        self,
+        index: int = 0,
+        plain: bool = False,
+    ):
+        if plain:
+            return self.to_plot["plain"]["temperature"][0]
+        else:
+            return self.to_plot["temperature"][index]
 
     def get_ivt(
         self,
@@ -106,7 +194,7 @@ class IVPlot(IVEvaluation, BasePlot):
             v = np.copy(ivt[1][skip[0] : skip[1]])
             t = np.copy(ivt[2][skip[0] : skip[1]])
         else:
-            ivt = self.to_plot["iv_tuples"][index]
+            ivt = self.to_plot["iv_tuples_raw"][index]
             i = np.copy(ivt[0])
             v = np.copy(ivt[1])
             t = np.copy(ivt[2])
@@ -226,22 +314,19 @@ class IVPlot(IVEvaluation, BasePlot):
     # endregion
 
     # region get ax
+
     def ax_i_t_tuples(
         self,
-        ax=None,
+        ax: Axes,
         index: int = 0,
         skip: list[int] = [10, -10],
-        plain: bool = False,
-        fig_nr: int = 0,
+        plain: bool = True,
         inverse: bool = False,
         raw: bool = False,
+        i_lim: tuple[float | None, float | None] = (None, None),
+        t_lim: tuple[float | None, float | None] = (None, None),
         **kwargs,
     ):
-        if not ax:
-            # Generate Figure
-            plt.close(fig_nr)
-            fig, ax = plt.subplots(num=fig_nr)
-
         # get data
         if raw:
             i, _, t = self.get_ivt_raw(
@@ -257,43 +342,62 @@ class IVPlot(IVEvaluation, BasePlot):
             )
         t -= np.nanmin(t)
 
-        # get_norm
-        i_norm_value, i_norm_string = get_norm(i)
-        t_norm_value, t_norm_string = get_norm(t)
+        # get norm and limit
+        if self.i_norm is None:
+            i_norm_value, i_norm_string = get_norm(i)
+        else:
+            i_norm_value, i_norm_string = self.i_norm
+        i_lim = (
+            i_lim[0] if i_lim[0] is not None else self.i_lim[0],
+            i_lim[1] if i_lim[1] is not None else self.i_lim[1],
+        )
+        i_lim = (
+            i_lim[0] / i_norm_value if i_lim[0] is not None else None,
+            i_lim[1] / i_norm_value if i_lim[1] is not None else None,
+        )
 
-        i /= i_norm_value
-        t /= t_norm_value
+        if self.t_norm is None:
+            t_norm_value, t_norm_string = get_norm(t)
+        else:
+            t_norm_value, t_norm_string = self.t_norm
+        t_lim = (
+            t_lim[0] if t_lim[0] is not None else self.t_lim[0],
+            t_lim[1] if t_lim[1] is not None else self.t_lim[1],
+        )
+        t_lim = (
+            t_lim[0] / t_norm_value if t_lim[0] is not None else None,
+            t_lim[1] / t_norm_value if t_lim[1] is not None else None,
+        )
 
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
         ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
 
         if not inverse:
-            ax.set_ylabel(rf"$I$ ({i_norm_string}A)")
             ax.set_xlabel(rf"$t$ ({t_norm_string}s)")
-            ax.plot(t, i, ".", **kwargs)
-
+            ax.set_ylabel(rf"$I$ ({i_norm_string}A)")
+            ax.plot(t / t_norm_value, i / i_norm_value, ".", **kwargs)
+            ax.set_xlim(left=t_lim[0], right=t_lim[1])
+            ax.set_ylim(bottom=i_lim[0], top=i_lim[1])
         else:
             ax.set_xlabel(rf"$I$ ({i_norm_string}A)")
             ax.set_ylabel(rf"$t$ ({t_norm_string}s)")
-            ax.plot(i, t, ".", **kwargs)
+            ax.plot(i / i_norm_value, t / t_norm_value, ".", **kwargs)
+            ax.set_xlim(left=i_lim[0], right=i_lim[1])
+            ax.set_ylim(bottom=t_lim[0], top=t_lim[1])
         return ax
 
     def ax_v_t_tuples(
         self,
-        ax=None,
+        ax: Axes,
         index: int = 0,
         skip: list[int] = [10, -10],
-        plain: bool = False,
-        fig_nr: int = 0,
+        plain: bool = True,
         inverse: bool = False,
         raw: bool = False,
+        v_lim: tuple[float | None, float | None] = (None, None),
+        t_lim: tuple[float | None, float | None] = (None, None),
         **kwargs,
     ):
-        if not ax:
-            # Generate Figure
-            plt.close(fig_nr)
-            fig, ax = plt.subplots(num=fig_nr)
-
         # get data
         if raw:
             _, v, t = self.get_ivt_raw(
@@ -307,15 +411,34 @@ class IVPlot(IVEvaluation, BasePlot):
                 plain,
                 skip,
             )
-
         t -= np.nanmin(t)
 
-        # get_norm
-        v_norm_value, v_norm_string = get_norm(v)
-        t_norm_value, t_norm_string = get_norm(t)
+        # get norm and limit
+        if self.v_norm is None:
+            v_norm_value, v_norm_string = get_norm(v)
+        else:
+            v_norm_value, v_norm_string = self.v_norm
+        v_lim = (
+            v_lim[0] if v_lim[0] is not None else self.v_lim[0],
+            v_lim[1] if v_lim[1] is not None else self.v_lim[1],
+        )
+        v_lim = (
+            v_lim[0] / v_norm_value if v_lim[0] is not None else None,
+            v_lim[1] / v_norm_value if v_lim[1] is not None else None,
+        )
 
-        v /= v_norm_value
-        t /= t_norm_value
+        if self.t_norm is None:
+            t_norm_value, t_norm_string = get_norm(t)
+        else:
+            t_norm_value, t_norm_string = self.t_norm
+        t_lim = (
+            t_lim[0] if t_lim[0] is not None else self.t_lim[0],
+            t_lim[1] if t_lim[1] is not None else self.t_lim[1],
+        )
+        t_lim = (
+            t_lim[0] / t_norm_value if t_lim[0] is not None else None,
+            t_lim[1] / t_norm_value if t_lim[1] is not None else None,
+        )
 
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
         ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
@@ -323,159 +446,152 @@ class IVPlot(IVEvaluation, BasePlot):
         if not inverse:
             ax.set_ylabel(rf"$V$ ({v_norm_string}V)")
             ax.set_xlabel(rf"$t$ ({t_norm_string}s)")
-            ax.plot(t, v, ".", **kwargs)
+            ax.plot(t / t_norm_value, v / v_norm_value, ".", **kwargs)
+            ax.set_xlim(left=t_lim[0], right=t_lim[1])
+            ax.set_ylim(bottom=v_lim[0], top=v_lim[1])
 
         else:
             ax.set_xlabel(rf"$V$ ({v_norm_string}V)")
             ax.set_ylabel(rf"$t$ ({t_norm_string}s)")
-            ax.plot(v, t, ".", **kwargs)
+            ax.plot(v / v_norm_value, t / t_norm_value, ".", **kwargs)
+            ax.set_xlim(left=v_lim[0], right=v_lim[1])
+            ax.set_ylim(bottom=t_lim[0], top=t_lim[1])
 
-        return ax
-
-    def ax_v_i_tuples(
-        self,
-        ax=None,
-        index: int = 0,
-        skip: list[int] = [10, -10],
-        plain: bool = False,
-        fig_nr: int = 0,
-        inverse: bool = False,
-        raw: bool = False,
-        **kwargs,
-    ):
-        if not ax:
-            # Generate Figure
-            plt.close(fig_nr)
-            fig, ax = plt.subplots(num=fig_nr)
-
-        # get data
-        if raw:
-            i, v, _ = self.get_ivt_raw(
-                index,
-                plain,
-                skip,
-            )
-        else:
-            i, v, _ = self.get_ivt(
-                index,
-                plain,
-                skip,
-            )
-
-        # get_norm
-        i_norm_value, i_norm_string = get_norm(i)
-        v_norm_value, v_norm_string = get_norm(v)
-
-        i /= i_norm_value
-        v /= v_norm_value
-
-        # set tick style
-        ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
-
-        if not inverse:
-            ax.set_ylabel(rf"$V$ ({v_norm_string}V)")
-            ax.set_xlabel(rf"$I$ ({i_norm_string}A)")
-            ax.plot(i, v, ".", **kwargs)
-
-        else:
-            ax.set_xlabel(rf"$V$ ({v_norm_string}V)")
-            ax.set_ylabel(rf"$I$ ({i_norm_string}A)")
-            ax.plot(v, i, ".", **kwargs)
-
-        return ax
-
-    def ax_i_v(
-        self,
-        ax=None,
-        index: int = 0,
-        plain: bool = False,
-        fig_nr: int = 0,
-        inverse: bool = False,
-        **kwargs,
-    ):
-        if not ax:
-            # Generate Figure
-            plt.close(fig_nr)
-            fig, ax = plt.subplots(num=fig_nr)
-
-        # get_data
-        v, i = self.get_i_v(index, plain)
-
-        # get_norm
-        v_norm_value, v_norm_string = get_norm(v)
-        i_norm_value, i_norm_string = get_norm(i)
-
-        # set tick style
-        ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
-
-        if not inverse:
-            ax.set_xlabel(rf"$V$ ({v_norm_string}V)")
-            ax.set_ylabel(rf"$I$ ({i_norm_string}A)")
-            ax.plot(v / v_norm_value, i / i_norm_value, ".", **kwargs)
-
-        else:
-            ax.set_xlabel(rf"$I$ ({i_norm_string}A)")
-            ax.set_ylabel(rf"$V$ ({v_norm_string}V)")
-            ax.plot(i / i_norm_value, v / v_norm_value, ".", **kwargs)
         return ax
 
     def ax_v_i(
         self,
-        ax=None,
+        ax: Axes,
         index: int = 0,
-        plain: bool = False,
-        fig_nr: int = 0,
+        skip: list[int] = [10, -10],
+        plain: bool = True,
         inverse: bool = False,
+        mode: str = "tuples_raw",
+        v_lim: tuple[float | None, float | None] = (None, None),
+        i_lim: tuple[float | None, float | None] = (None, None),
         **kwargs,
     ):
-        if not ax:
-            # Generate Figure
-            plt.close(fig_nr)
-            fig, ax = plt.subplots(num=fig_nr)
+        # get data
+        match mode:
+            case "tuples_raw":
+                i, v, _ = self.get_ivt_raw(
+                    index,
+                    plain,
+                    skip,
+                )
+            case "tuples":
+                i, v, _ = self.get_ivt(
+                    index,
+                    plain,
+                    skip,
+                )
+            case "v_i":
+                i, v = self.get_v_i(index, plain)
+            case "i_v":
+                v, i = self.get_i_v(index, plain)
+            case _:
+                logger.info(
+                    "(%s) ax_v_i() mode must be: 'tuples_raw','tuples', 'i_v', v_i'",
+                    self._iv_plot_name,
+                )
+                return
 
-        # get_data
-        i, v = self.get_v_i(index, plain)
+        # get norm and limit
+        if self.v_norm is None:
+            v_norm_value, v_norm_string = get_norm(v)
+        else:
+            v_norm_value, v_norm_string = self.v_norm
+        v_lim = (
+            v_lim[0] if v_lim[0] is not None else self.v_lim[0],
+            v_lim[1] if v_lim[1] is not None else self.v_lim[1],
+        )
+        v_lim = (
+            v_lim[0] / v_norm_value if v_lim[0] is not None else None,
+            v_lim[1] / v_norm_value if v_lim[1] is not None else None,
+        )
 
-        # get_norm
-        v_norm_value, v_norm_string = get_norm(v)
-        i_norm_value, i_norm_string = get_norm(i)
+        if self.i_norm is None:
+            i_norm_value, i_norm_string = get_norm(i)
+        else:
+            i_norm_value, i_norm_string = self.i_norm
+        i_lim = (
+            i_lim[0] if i_lim[0] is not None else self.i_lim[0],
+            i_lim[1] if i_lim[1] is not None else self.i_lim[1],
+        )
+        i_lim = (
+            i_lim[0] / i_norm_value if i_lim[0] is not None else None,
+            i_lim[1] / i_norm_value if i_lim[1] is not None else None,
+        )
 
         # set tick style
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
         ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
 
         if not inverse:
-            ax.set_xlabel(rf"$I$ ({i_norm_string}A)")
             ax.set_ylabel(rf"$V$ ({v_norm_string}V)")
+            ax.set_xlabel(rf"$I$ ({i_norm_string}A)")
             ax.plot(i / i_norm_value, v / v_norm_value, ".", **kwargs)
+            ax.set_xlim(left=i_lim[0], right=i_lim[1])
+            ax.set_ylim(bottom=v_lim[0], top=v_lim[1])
 
         else:
             ax.set_xlabel(rf"$V$ ({v_norm_string}V)")
             ax.set_ylabel(rf"$I$ ({i_norm_string}A)")
             ax.plot(v / v_norm_value, i / i_norm_value, ".", **kwargs)
+            ax.set_xlim(left=v_lim[0], right=v_lim[1])
+            ax.set_ylim(bottom=i_lim[0], top=i_lim[1])
+
         return ax
 
     def ax_didv_v(
         self,
-        ax=None,
+        ax: Axes,
         index: int = 0,
-        plain: bool = False,
-        fig_nr: int = 0,
+        plain: bool = True,
         inverse: bool = False,
+        v_lim: tuple[float | None, float | None] = (None, None),
+        didv_lim: tuple[float | None, float | None] = (None, None),
+        **kwargs,
     ):
-        if not ax:
-            # Generate Figure
-            plt.close(fig_nr)
-            fig, ax = plt.subplots(num=fig_nr)
+        # get data
+        v, didv = self.get_didv_v(plain=plain, index=index)
 
-        # get_data
-        v, didv = self.get_didv_v(index, plain)
+        # Apply optional smoothing to dI/dV map
+        if self.smoothing:
+            didv = do_smoothing(
+                data=np.array([didv]),
+                window_length=self.window_length,
+                polyorder=self.polyorder,
+            )
+            didv = didv[0]
 
-        # get_norm
-        v_norm_value, v_norm_string = get_norm(v)
-        didv_norm_value, didv_norm_string = get_norm(didv)
+        # get norm and limit
+        if self.v_norm is None:
+            v_norm_value, v_norm_string = get_norm(v)
+        else:
+            v_norm_value, v_norm_string = self.v_norm
+
+        v_lim = (
+            v_lim[0] if v_lim[0] is not None else self.v_lim[0],
+            v_lim[1] if v_lim[1] is not None else self.v_lim[1],
+        )
+        v_lim = (
+            v_lim[0] / v_norm_value if v_lim[0] is not None else None,
+            v_lim[1] / v_norm_value if v_lim[1] is not None else None,
+        )
+
+        if self.didv_norm is None:
+            didv_norm_value, didv_norm_string = get_norm(didv)
+        else:
+            didv_norm_value, didv_norm_string = self.didv_norm
+        didv_lim = (
+            didv_lim[0] if didv_lim[0] is not None else self.didv_lim[0],
+            didv_lim[1] if didv_lim[1] is not None else self.didv_lim[1],
+        )
+        didv_lim = (
+            didv_lim[0] / didv_norm_value if didv_lim[0] is not None else None,
+            didv_lim[1] / didv_norm_value if didv_lim[1] is not None else None,
+        )
 
         # set tick style
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
@@ -484,33 +600,56 @@ class IVPlot(IVEvaluation, BasePlot):
         if not inverse:
             ax.set_xlabel(rf"$V$ ({v_norm_string}V)")
             ax.set_ylabel(rf"d$I$/d$V$ ({didv_norm_string}$G_0$)")
-            ax.plot(v / v_norm_value, didv / didv_norm_value, ".")
-
+            ax.plot(v / v_norm_value, didv / didv_norm_value, marker=".", **kwargs)
+            ax.set_xlim(left=v_lim[0], right=v_lim[1])
+            ax.set_ylim(bottom=didv_lim[0], top=didv_lim[1])
         else:
             ax.set_xlabel(rf"d$I$/d$V$ ({didv_norm_string}$G_0$)")
             ax.set_ylabel(rf"$V$ ({v_norm_string}V)")
-            ax.plot(didv / didv_norm_value, v / v_norm_value, ".")
+            ax.plot(didv / didv_norm_value, v / v_norm_value, marker=".", **kwargs)
+            ax.set_xlim(left=didv_lim[0], right=didv_lim[1])
+            ax.set_ylim(bottom=v_lim[0], top=v_lim[1])
         return ax
 
     def ax_dvdi_i(
         self,
-        ax=None,
+        ax: Axes,
         index: int = 0,
-        plain: bool = False,
-        fig_nr: int = 0,
+        plain: bool = True,
         inverse: bool = False,
+        i_lim: tuple[float | None, float | None] = (None, None),
+        dvdi_lim: tuple[float | None, float | None] = (None, None),
+        **kwargs,
     ):
-        if not ax:
-            # Generate Figure
-            plt.close(fig_nr)
-            fig, ax = plt.subplots(num=fig_nr)
-
         # get_data
         i, dvdi = self.get_dvdi_i(index, plain)
 
-        # get_norm
-        i_norm_value, i_norm_string = get_norm(i)
-        dvdi_norm_value, dvdi_norm_string = get_norm(dvdi)
+        # get norm and limit
+        if self.dvdi_norm is None:
+            dvdi_norm_value, dvdi_norm_string = get_norm(dvdi)
+        else:
+            dvdi_norm_value, dvdi_norm_string = self.dvdi_norm
+        dvdi_lim = (
+            dvdi_lim[0] if dvdi_lim[0] is not None else self.dvdi_lim[0],
+            dvdi_lim[1] if dvdi_lim[1] is not None else self.dvdi_lim[1],
+        )
+        dvdi_lim = (
+            dvdi_lim[0] / dvdi_norm_value if dvdi_lim[0] is not None else None,
+            dvdi_lim[1] / dvdi_norm_value if dvdi_lim[1] is not None else None,
+        )
+
+        if self.i_norm is None:
+            i_norm_value, i_norm_string = get_norm(i)
+        else:
+            i_norm_value, i_norm_string = self.i_norm
+        i_lim = (
+            i_lim[0] if i_lim[0] is not None else self.i_lim[0],
+            i_lim[1] if i_lim[1] is not None else self.i_lim[1],
+        )
+        i_lim = (
+            i_lim[0] / i_norm_value if i_lim[0] is not None else None,
+            i_lim[1] / i_norm_value if i_lim[1] is not None else None,
+        )
 
         # set tick style
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
@@ -519,123 +658,95 @@ class IVPlot(IVEvaluation, BasePlot):
         if not inverse:
             ax.set_xlabel(rf"$I$ ({i_norm_string}A)")
             ax.set_ylabel(rf"d$V$/d$I$ ({dvdi_norm_string}$\Omega$)")
-            ax.plot(i / i_norm_value, dvdi / dvdi_norm_value, ".")
+            ax.plot(i / i_norm_value, dvdi / dvdi_norm_value, ".", **kwargs)
+            ax.set_xlim(left=i_lim[0], right=i_lim[1])
+            ax.set_ylim(bottom=dvdi_lim[0], top=dvdi_lim[1])
 
         else:
             ax.set_xlabel(rf"d$V$/d$I$ ({dvdi_norm_string}$\Omega$)")
             ax.set_ylabel(rf"$I$ ({i_norm_string}A)")
-            ax.plot(dvdi / dvdi_norm_value, i / i_norm_value, ".")
+            ax.plot(dvdi / dvdi_norm_value, i / i_norm_value, ".", **kwargs)
+            ax.set_xlim(left=dvdi_lim[0], right=dvdi_lim[1])
+            ax.set_ylim(bottom=i_lim[0], top=i_lim[1])
         return ax
 
-    def ax_T_v(
+    def ax_T_y(
         self,
-        ax=None,
-        index: int = 0,
-        plain: bool = False,
-        fig_nr: int = 0,
+        ax: Axes,
         inverse: bool = False,
+        T_lim: tuple[float | None, float | None] = (None, None),
+        y_lim: tuple[float | None, float | None] = (None, None),
+        **kwargs,
     ):
-        if not ax:
-            # Generate Figure
-            plt.close(fig_nr)
-            fig, ax = plt.subplots(num=fig_nr)
 
         # get_data
-        v, T = self.get_T_v(index, plain)
+        y, T = self.get_T_y()
 
-        # get_norm
-        v_norm_value, v_norm_string = get_norm(v)
-        T_norm_value, T_norm_string = get_norm(T)
+        # get norm and limit
+        if self.y_norm is None:
+            y_norm_value, y_norm_string = get_norm(y)
+        else:
+            y_norm_value, y_norm_string = self.y_norm
+        y_lim = (
+            y_lim[0] if y_lim[0] is not None else self.y_lim[0],
+            y_lim[1] if y_lim[1] is not None else self.y_lim[1],
+        )
+        y_lim = (
+            y_lim[0] / y_norm_value if y_lim[0] is not None else None,
+            y_lim[1] / y_norm_value if y_lim[1] is not None else None,
+        )
 
-        v /= v_norm_value
-        T /= T_norm_value
+        if self.T_norm is None:
+            T_norm_value, T_norm_string = get_norm(T)
+        else:
+            T_norm_value, T_norm_string = self.T_norm
+        T_lim = (
+            T_lim[0] if T_lim[0] is not None else self.T_lim[0],
+            T_lim[1] if T_lim[1] is not None else self.T_lim[1],
+        )
+        T_lim = (
+            T_lim[0] / T_norm_value if T_lim[0] is not None else None,
+            T_lim[1] / T_norm_value if T_lim[1] is not None else None,
+        )
 
         # set tick style
         ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
         ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
 
         if not inverse:
-            ax.set_xlabel(rf"$V$ ({v_norm_string}V)")
+            ax.set_xlabel(
+                rf"{self.y_characters[0]} ({y_norm_string}{self.y_characters[1]})"
+            )
             ax.set_ylabel(rf"$T$ ({T_norm_string}K)")
-            ax.plot(v / v_norm_value, T / T_norm_value, ".")
+            ax.plot(y / y_norm_value, T / T_norm_value, ".", **kwargs)
+            ax.set_xlim(left=y_lim[0], right=y_lim[1])
+            ax.set_ylim(bottom=T_lim[0], top=T_lim[1])
 
         else:
             ax.set_xlabel(rf"$T$ ({T_norm_string}K)")
-            ax.set_ylabel(rf"$V$ ({v_norm_string}V)")
-            ax.plot(T, v, ".")
-        return ax
-
-    def ax_T_i(
-        self,
-        ax=None,
-        index: int = 0,
-        plain: bool = False,
-        fig_nr: int = 0,
-        inverse: bool = False,
-    ):
-        if not ax:
-            # Generate Figure
-            plt.close(fig_nr)
-            fig, ax = plt.subplots(num=fig_nr)
-
-        # get_data
-        i, T = self.get_T_i(index, plain)
-
-        # get_norm
-        i_norm_value, i_norm_string = get_norm(i)
-        T_norm_value, T_norm_string = get_norm(T)
-
-        # set tick style
-        ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
-
-        if not inverse:
-            ax.set_xlabel(rf"$I$ ({i_norm_string}A)")
-            ax.set_ylabel(rf"$T$ ({T_norm_string}K)")
-            ax.plot(i / i_norm_value, T / T_norm_value, ".")
-
-        else:
-            ax.set_xlabel(rf"$T$ ({T_norm_string}K)")
-            ax.set_ylabel(rf"$I$ ({i_norm_string}A)")
-            ax.plot(T / T_norm_value, i / i_norm_value, ".")
+            ax.set_ylabel(
+                rf"{self.y_characters[0]} ({y_norm_string}{self.y_characters[1]})"
+            )
+            ax.plot(T / T_norm_value, y / y_norm_value, ".", **kwargs)
+            ax.set_xlim(left=T_lim[0], right=T_lim[1])
+            ax.set_ylim(bottom=y_lim[0], top=y_lim[1])
         return ax
 
     def ax_didv_vy(
         self,
-        faxs: list = [],
-        fig_nr: int = 0,
+        fig: Figure,
+        axs: list[Axes],
         inverse: bool = False,
-        z_lim: tuple = (None, None),
-        z_contrast: float = 1,
+        cmap: ListedColormap | None = None,
+        didv_c_lim: tuple[float | None, float | None] = (None, None),
+        v_lim: tuple[float | None, float | None] = (None, None),
+        y_lim: tuple[float | None, float | None] = (None, None),
+        contrast: float | None = None,
         **kwargs,
     ):
-        """
-        Plot dI/dV as a 2D color map over V and Y.
-
-        Parameters
-        ----------
-        faxs : list, optional
-            If provided, should contain [fig, ax, cax] to plot on existing axes.
-        fig_nr : int, optional
-            Figure number for matplotlib (if new figure is created).
-        inverse : bool, optional
-            If True, swap X and Y axes in the plot.
-        z_lim : tuple, optional
-            Z-axis (color) limits. If None, will be auto-calculated.
-        z_contrast : float, optional
-            Factor to scale standard deviation for z-lim if not provided.
-        **kwargs : dict
-            Additional keyword arguments passed to `imshow`.
-        """
-        if not faxs:
-            # Create new figure and axis layout if no axes passed
-            plt.close(fig_nr)
-            fig, [ax, cax] = plt.subplots(num=fig_nr, ncols=2)
-        else:
-            # Use provided axes
-            fig = faxs[0]
-            ax = faxs[1]
-            cax = faxs[2]
+        # Use provided axes
+        ax = axs[0]
+        cax = axs[1]
 
         # Load data: voltage (V), position (Y), differential conductance (dI/dV)
         v, y, didv = self.get_didv_vy()
@@ -646,18 +757,51 @@ class IVPlot(IVEvaluation, BasePlot):
                 data=didv, window_length=self.window_length, polyorder=self.polyorder
             )
 
-        # Normalize axes and values for nicer labels and scaling
-        v_norm_value, v_norm_string = get_norm(v)
-        y_norm_value, y_norm_string = get_norm(y)
-        didv_norm_value, didv_norm_string = get_norm(didv)
+        # get norm and limit
+        if self.v_norm is None:
+            v_norm_value, v_norm_string = get_norm(v)
+        else:
+            v_norm_value, v_norm_string = self.v_norm
+        v_lim = (
+            v_lim[0] if v_lim[0] is not None else self.v_lim[0],
+            v_lim[1] if v_lim[1] is not None else self.v_lim[1],
+        )
+        v_lim = (
+            v_lim[0] / v_norm_value if v_lim[0] is not None else None,
+            v_lim[1] / v_norm_value if v_lim[1] is not None else None,
+        )
 
-        v /= v_norm_value
-        y /= y_norm_value
-        didv /= didv_norm_value
+        if self.y_norm is None:
+            y_norm_value, y_norm_string = get_norm(y)
+        else:
+            y_norm_value, y_norm_string = self.y_norm
+        y_lim = (
+            y_lim[0] if y_lim[0] is not None else self.y_lim[0],
+            y_lim[1] if y_lim[1] is not None else self.y_lim[1],
+        )
+        y_lim = (
+            y_lim[0] / y_norm_value if y_lim[0] is not None else None,
+            y_lim[1] / y_norm_value if y_lim[1] is not None else None,
+        )
+
+        if self.didv_norm is None:
+            didv_norm_value, didv_norm_string = get_norm(didv)
+        else:
+            didv_norm_value, didv_norm_string = self.didv_norm
+        didv_c_lim = (
+            didv_c_lim[0] if didv_c_lim[0] is not None else self.didv_c_lim[0],
+            didv_c_lim[1] if didv_c_lim[1] is not None else self.didv_c_lim[1],
+        )
+        didv_c_lim = (
+            didv_c_lim[0] / didv_norm_value if didv_c_lim[0] is not None else None,
+            didv_c_lim[1] / didv_norm_value if didv_c_lim[1] is not None else None,
+        )
 
         # Determine color limits and plotting extent
-        z_lim = get_z_lim(didv, z_lim, z_contrast)
-        z_ext, _, _ = get_ext(x=v, y=y)
+        if contrast is None:
+            contrast = self.contrast
+        didv_c_lim = get_z_lim(didv / didv_norm_value, didv_c_lim, contrast)
+        ext, _, _ = get_ext(x=v / v_norm_value, y=y / y_norm_value)
 
         # Configure axes based on orientation
         if not inverse:
@@ -673,14 +817,16 @@ class IVPlot(IVEvaluation, BasePlot):
             )
             didv = np.rot90(didv)
             orientation = "horizontal"
-            z_ext = [z_ext[2], z_ext[3], z_ext[0], z_ext[1]]
+            ext = [ext[2], ext[3], ext[0], ext[1]]
 
+        if cmap is None:
+            cmap = self.cmap
         # Plot the image with correct color scaling and axis extents
         im = ax.imshow(
-            didv,
-            cmap=self.cmap,
-            extent=z_ext,
-            clim=z_lim,
+            didv / didv_norm_value,
+            cmap=cmap,
+            extent=tuple(ext),
+            clim=didv_c_lim,
             aspect="auto",
             origin="lower",
             interpolation="none",
@@ -703,40 +849,19 @@ class IVPlot(IVEvaluation, BasePlot):
 
     def ax_dvdi_iy(
         self,
-        faxs: list = [],
-        fig_nr: int = 0,
+        fig: Figure,
+        axs: list[Axes],
         inverse: bool = False,
-        z_lim: tuple = (None, None),
-        z_contrast: float = 1,
+        cmap: ListedColormap | None = None,
+        dvdi_c_lim: tuple[float | None, float | None] = (None, None),
+        i_lim: tuple[float | None, float | None] = (None, None),
+        y_lim: tuple[float | None, float | None] = (None, None),
+        contrast: float = 1,
         **kwargs,
     ):
-        """
-        Plot dI/dV as a 2D color map over V and Y.
-
-        Parameters
-        ----------
-        faxs : list, optional
-            If provided, should contain [fig, ax, cax] to plot on existing axes.
-        fig_nr : int, optional
-            Figure number for matplotlib (if new figure is created).
-        inverse : bool, optional
-            If True, swap X and Y axes in the plot.
-        z_lim : tuple, optional
-            Z-axis (color) limits. If None, will be auto-calculated.
-        z_contrast : float, optional
-            Factor to scale standard deviation for z-lim if not provided.
-        **kwargs : dict
-            Additional keyword arguments passed to `imshow`.
-        """
-        if not faxs:
-            # Create new figure and axis layout if no axes passed
-            plt.close(fig_nr)
-            fig, [ax, cax] = plt.subplots(num=fig_nr, ncols=2)
-        else:
-            # Use provided axes
-            fig = faxs[0]
-            ax = faxs[1]
-            cax = faxs[2]
+        # Use provided axes
+        ax = axs[0]
+        cax = axs[1]
 
         # Load data: voltage (V), position (Y), differential conductance (dI/dV)
         i, y, dvdi = self.get_dvdi_iy()
@@ -748,17 +873,48 @@ class IVPlot(IVEvaluation, BasePlot):
             )
 
         # Normalize axes and values for nicer labels and scaling
-        i_norm_value, i_norm_string = get_norm(i)
-        y_norm_value, y_norm_string = get_norm(y)
-        dvdi_norm_value, dvdi_norm_string = get_norm(dvdi)
+        if self.y_norm is None:
+            y_norm_value, y_norm_string = get_norm(y)
+        else:
+            y_norm_value, y_norm_string = self.y_norm
+        y_lim = (
+            y_lim[0] if y_lim[0] is not None else self.y_lim[0],
+            y_lim[1] if y_lim[1] is not None else self.y_lim[1],
+        )
+        y_lim = (
+            y_lim[0] / y_norm_value if y_lim[0] is not None else None,
+            y_lim[1] / y_norm_value if y_lim[1] is not None else None,
+        )
 
-        i /= i_norm_value
-        y /= y_norm_value
-        dvdi /= dvdi_norm_value
+        if self.i_norm is None:
+            i_norm_value, i_norm_string = get_norm(i)
+        else:
+            i_norm_value, i_norm_string = self.i_norm
+        i_lim = (
+            i_lim[0] if i_lim[0] is not None else self.i_lim[0],
+            i_lim[1] if i_lim[1] is not None else self.i_lim[1],
+        )
+        i_lim = (
+            i_lim[0] / i_norm_value if i_lim[0] is not None else None,
+            i_lim[1] / i_norm_value if i_lim[1] is not None else None,
+        )
+
+        if self.dvdi_norm is None:
+            dvdi_norm_value, dvdi_norm_string = get_norm(i)
+        else:
+            dvdi_norm_value, dvdi_norm_string = self.dvdi_norm
+        dvdi_c_lim = (
+            dvdi_c_lim[0] if dvdi_c_lim[0] is not None else self.dvdi_c_lim[0],
+            dvdi_c_lim[1] if dvdi_c_lim[1] is not None else self.dvdi_c_lim[1],
+        )
+        dvdi_c_lim = (
+            dvdi_c_lim[0] / dvdi_norm_value if dvdi_c_lim[0] is not None else None,
+            dvdi_c_lim[1] / dvdi_norm_value if dvdi_c_lim[1] is not None else None,
+        )
 
         # Determine color limits and plotting extent
-        z_lim = get_z_lim(dvdi, z_lim, z_contrast)
-        z_ext, _, _ = get_ext(x=i, y=y)
+        dvdi_c_lim = get_z_lim(dvdi / dvdi_norm_value, dvdi_c_lim, contrast)
+        ext, _, _ = get_ext(x=i / i_norm_value, y=y / y_norm_value)
 
         # Configure axes based on orientation
         if not inverse:
@@ -774,14 +930,16 @@ class IVPlot(IVEvaluation, BasePlot):
             )
             dvdi = np.rot90(dvdi)
             orientation = "horizontal"
-            z_ext = [z_ext[2], z_ext[3], z_ext[0], z_ext[1]]
+            ext = [ext[2], ext[3], ext[0], ext[1]]
 
+        if cmap is None:
+            cmap = self.cmap
         # Plot the image with correct color scaling and axis extents
         im = ax.imshow(
-            dvdi,
-            cmap=self.cmap,
-            extent=z_ext,
-            clim=z_lim,
+            dvdi / dvdi_norm_value,
+            cmap=cmap,
+            extent=tuple(ext),
+            clim=dvdi_c_lim,
             aspect="auto",
             origin="lower",
             interpolation="none",
@@ -802,124 +960,6 @@ class IVPlot(IVEvaluation, BasePlot):
 
         return ax, cax
 
-    def ax_T_vy(
-        self,
-        faxs: list = [],
-        fig_nr: int = 0,
-        inverse: bool = False,
-        z_lim: tuple = (None, None),
-        z_contrast: float = 1,
-        **kwargs,
-    ):
-        if not faxs:
-            # Create new figure and axis layout if no axes passed
-            plt.close(fig_nr)
-            fig, [ax, cax] = plt.subplots(num=fig_nr, ncols=2)
-        else:
-            # Use provided axes
-            fig = faxs[0]
-            ax = faxs[1]
-            cax = faxs[2]
-
-        # Load data: voltage (V), position (Y), differential conductance (dI/dV)
-        v, y, T = self.get_T_vy()
-
-        # Normalize axes and values for nicer labels and scaling
-        v_norm_value, v_norm_string = get_norm(v)
-        y_norm_value, y_norm_string = get_norm(y)
-        T_norm_value, didv_norm_string = get_norm(T)
-
-        v /= v_norm_value
-        y /= y_norm_value
-        T /= T_norm_value
-
-        # Determine color limits and plotting extent
-        z_lim = get_z_lim(T, z_lim, z_contrast)
-        z_ext, _, _ = get_ext(x=v, y=y)
-
-        # Configure axes based on orientation
-        if not inverse:
-            ax.set_xlabel(rf"$V$ ({v_norm_string}V)")
-            ax.set_ylabel(
-                rf"{self.y_characters[0]} ({y_norm_string}{self.y_characters[1]})"
-            )
-            orientation = "vertical"
-        else:
-            ax.set_ylabel(rf"$V$ ({v_norm_string}V)")
-            ax.set_xlabel(
-                rf"{self.y_characters[0]} ({y_norm_string}{self.y_characters[1]})"
-            )
-            T = np.rot90(T)
-            orientation = "horizontal"
-            z_ext = [z_ext[2], z_ext[3], z_ext[0], z_ext[1]]
-
-        # Plot the image with correct color scaling and axis extents
-        im = ax.imshow(
-            T,
-            cmap=self.cmap,
-            extent=z_ext,
-            clim=z_lim,
-            aspect="auto",
-            origin="lower",
-            interpolation="none",
-            **kwargs,
-        )
-
-        # Add colorbar with proper label and orientation
-        fig.colorbar(
-            im,
-            cax=cax,
-            label=rf"$T$ ({didv_norm_string}K)",
-            orientation=orientation,
-        )
-
-        # Tweak ticks and style
-        ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
-
-        return ax, cax
-
-    def ax_T_y(
-        self,
-        ax=None,
-        fig_nr: int = 0,
-        inverse: bool = False,
-        **kwargs,
-    ):
-        if not ax:
-            # Generate Figure
-            plt.close(fig_nr)
-            fig, ax = plt.subplots(num=fig_nr)
-
-        # get_data
-        y, T = self.get_T_y()
-
-        # get_norm
-        y_norm_value, y_norm_string = get_norm(y)
-        T_norm_value, T_norm_string = get_norm(T)
-
-        y /= y_norm_value
-        T /= T_norm_value
-
-        # set tick style
-        ax.ticklabel_format(axis="x", style="sci", scilimits=(-9, 9), useMathText=True)
-        ax.tick_params(direction="in", left=True, right=True, top=True, bottom=True)
-
-        if not inverse:
-            ax.set_xlabel(
-                rf"{self.y_characters[0]} ({y_norm_string}{self.y_characters[1]})"
-            )
-            ax.set_ylabel(rf"$T$ ({T_norm_string}K)")
-            ax.plot(y, T, **kwargs)
-
-        else:
-            ax.set_xlabel(rf"$T$ ({T_norm_string}K)")
-            ax.set_ylabel(
-                rf"{self.y_characters[0]} ({y_norm_string}{self.y_characters[1]})"
-            )
-            ax.plot(T, y, **kwargs)
-        return ax
-
     # endregion
 
     # region get fig
@@ -927,9 +967,12 @@ class IVPlot(IVEvaluation, BasePlot):
     def fig_didv_vy(
         self,
         fig_nr: int = 0,
-        x_lim: tuple = (None, None),
-        y_lim: tuple = (None, None),
-        z_lim: tuple = (None, None),
+        width_ratios: list[float] = [4, 0.2],
+        cmap: ListedColormap | None = None,
+        v_lim: tuple[float | None, float | None] = (None, None),
+        y_lim: tuple[float | None, float | None] = (None, None),
+        didv_c_lim: tuple[float | None, float | None] = (None, None),
+        contrast: float = 1,
     ):
         plt.close(fig_nr)
         fig, axs = plt.subplots(
@@ -938,24 +981,32 @@ class IVPlot(IVEvaluation, BasePlot):
             ncols=2,
             figsize=self.fig_size,
             dpi=self.dpi,
-            gridspec_kw={"width_ratios": [4, 0.2]},
+            gridspec_kw={"width_ratios": width_ratios},
             constrained_layout=True,
         )
         # get axs
-        axs[0], axs[1] = self.ax_didv_vy(faxs=[fig, axs[0], axs[1]], z_lim=z_lim)
-
-        # set limits
-        axs[0].set_xlim(x_lim)
-        axs[0].set_ylim(y_lim)
+        axs = self.ax_didv_vy(
+            fig=fig,
+            axs=axs,
+            cmap=cmap,
+            v_lim=v_lim,
+            y_lim=y_lim,
+            didv_c_lim=didv_c_lim,
+            contrast=contrast,
+        )
 
         return fig, axs
 
     def fig_didv_vy_T(
         self,
         fig_nr: int = 0,
-        x_lim: tuple = (None, None),
-        y_lim: tuple = (None, None),
-        z_lim: tuple = (None, None),
+        width_ratios: list[float] = [1.0, 4.0, 0.2],
+        cmap: ListedColormap | None = None,
+        v_lim: tuple[float | None, float | None] = (None, None),
+        y_lim: tuple[float | None, float | None] = (None, None),
+        T_lim: tuple[float | None, float | None] = (None, None),
+        didv_c_lim: tuple[float | None, float | None] = (None, None),
+        contrast: float = 1,
     ):
         plt.close(fig_nr)
         fig, axs = plt.subplots(
@@ -964,14 +1015,20 @@ class IVPlot(IVEvaluation, BasePlot):
             ncols=3,
             figsize=self.fig_size,
             dpi=self.dpi,
-            gridspec_kw={"width_ratios": [1, 4, 0.2]},
+            gridspec_kw={"width_ratios": width_ratios},
             constrained_layout=True,
         )
         # get axs
-        axs[1], axs[2] = self.ax_didv_vy(faxs=[fig, axs[1], axs[2]], z_lim=z_lim)
-        axs[0] = self.ax_T_y(
-            ax=axs[0], inverse=True, marker=".", linestyle="", color="grey"
+        axs[1], axs[2] = self.ax_didv_vy(
+            fig=fig,
+            axs=[axs[1], axs[2]],
+            cmap=cmap,
+            v_lim=v_lim,
+            y_lim=y_lim,
+            didv_c_lim=didv_c_lim,
+            contrast=contrast,
         )
+        axs[0] = self.ax_T_y(ax=axs[0], inverse=True, linestyle="", color="grey")
 
         # modify
         axs[0].xaxis.set_inverted(True)
@@ -980,17 +1037,19 @@ class IVPlot(IVEvaluation, BasePlot):
         axs[1].set_ylabel("")
 
         # set limits
-        axs[1].set_xlim(x_lim)
-        axs[1].set_ylim(y_lim)
+        axs[0].set_xlim(T_lim[::-1])
 
         return fig, axs
 
     def fig_dvdi_iy(
         self,
         fig_nr: int = 0,
-        x_lim: tuple = (None, None),
-        y_lim: tuple = (None, None),
-        z_lim: tuple = (None, None),
+        width_ratios: list[float] = [4, 0.2],
+        cmap: ListedColormap | None = None,
+        i_lim: tuple[float | None, float | None] = (None, None),
+        y_lim: tuple[float | None, float | None] = (None, None),
+        dvdi_c_lim: tuple[float | None, float | None] = (None, None),
+        contrast: float = 1,
     ):
         plt.close(fig_nr)
         fig, axs = plt.subplots(
@@ -999,24 +1058,32 @@ class IVPlot(IVEvaluation, BasePlot):
             ncols=2,
             figsize=self.fig_size,
             dpi=self.dpi,
-            gridspec_kw={"width_ratios": [4, 0.2]},
+            gridspec_kw={"width_ratios": width_ratios},
             constrained_layout=True,
         )
         # get axs
-        axs[0], axs[1] = self.ax_dvdi_iy(faxs=[fig, axs[0], axs[1]], z_lim=z_lim)
-
-        # set limits
-        axs[0].set_xlim(x_lim)
-        axs[0].set_ylim(y_lim)
+        axs = self.ax_dvdi_iy(
+            fig=fig,
+            axs=axs,
+            cmap=cmap,
+            i_lim=i_lim,
+            y_lim=y_lim,
+            dvdi_c_lim=dvdi_c_lim,
+            contrast=contrast,
+        )
 
         return fig, axs
 
     def fig_dvdi_iy_T(
         self,
         fig_nr: int = 0,
-        x_lim: tuple = (None, None),
-        y_lim: tuple = (None, None),
-        z_lim: tuple = (None, None),
+        width_ratios: list[float] = [1.0, 4.0, 0.2],
+        cmap: ListedColormap | None = None,
+        i_lim: tuple[float | None, float | None] = (None, None),
+        y_lim: tuple[float | None, float | None] = (None, None),
+        T_lim: tuple[float | None, float | None] = (None, None),
+        dvdi_c_lim: tuple[float | None, float | None] = (None, None),
+        contrast: float = 1,
     ):
         plt.close(fig_nr)
         fig, axs = plt.subplots(
@@ -1025,14 +1092,20 @@ class IVPlot(IVEvaluation, BasePlot):
             ncols=3,
             figsize=self.fig_size,
             dpi=self.dpi,
-            gridspec_kw={"width_ratios": [1, 4, 0.2]},
+            gridspec_kw={"width_ratios": width_ratios},
             constrained_layout=True,
         )
         # get axs
-        axs[1], axs[2] = self.ax_dvdi_iy(faxs=[fig, axs[1], axs[2]], z_lim=z_lim)
-        axs[0] = self.ax_T_y(
-            ax=axs[0], inverse=True, marker=".", linestyle="", color="grey"
+        axs[1], axs[2] = self.ax_dvdi_iy(
+            fig=fig,
+            axs=[axs[1], axs[2]],
+            cmap=cmap,
+            i_lim=i_lim,
+            y_lim=y_lim,
+            dvdi_c_lim=dvdi_c_lim,
+            contrast=contrast,
         )
+        axs[0] = self.ax_T_y(ax=axs[0], inverse=True, linestyle="", color="grey")
 
         # modify
         axs[0].xaxis.set_inverted(True)
@@ -1041,17 +1114,19 @@ class IVPlot(IVEvaluation, BasePlot):
         axs[1].set_ylabel("")
 
         # set limits
-        axs[0].set_xlim(x_lim)
-        axs[0].set_ylim(y_lim)
+        axs[0].set_xlim(T_lim[::-1])
 
         return fig, axs
 
     def fig_ididv_v(
         self,
         fig_nr: int = 0,
-        x_lim: tuple = (None, None),
-        y_lim: tuple = (None, None),
-        z_lim: tuple = (None, None),
+        v_lim: tuple = (None, None),
+        i_lim: tuple = (None, None),
+        didv_lim: tuple = (None, None),
+        dvdi_lim: tuple = (None, None),
+        plain: bool = True,
+        index: int = 0,
     ):
         plt.close(fig_nr)
         fig, axs = plt.subplots(
@@ -1066,31 +1141,56 @@ class IVPlot(IVEvaluation, BasePlot):
 
         axs[0, 0].remove()
 
-        axs[1, 1] = self.ax_v_i_tuples(
+        axs[1, 1] = self.ax_v_i(
             ax=axs[1, 1],
-            index=0,
-            plain=True,
-            fig_nr=fig_nr,
+            mode="tuples_raw",
+            index=index,
+            plain=plain,
             inverse=True,
-            raw=True,
             color="lightgrey",
+            label="raw",
+            linestyle="-",
         )
 
-        axs[1, 1] = self.ax_v_i_tuples(
-            ax=axs[1, 1], index=0, plain=True, fig_nr=fig_nr, inverse=True, color="grey"
-        )
-        axs[1, 1] = self.ax_i_v(
-            ax=axs[1, 1], index=0, plain=True, fig_nr=fig_nr, inverse=False, color="red"
+        axs[1, 1] = self.ax_v_i(
+            ax=axs[1, 1],
+            mode="tuples",
+            index=index,
+            plain=plain,
+            inverse=True,
+            color="grey",
+            label="sampled",
         )
         axs[1, 1] = self.ax_v_i(
-            ax=axs[1, 1], index=0, plain=True, fig_nr=fig_nr, inverse=True, color="blue"
+            ax=axs[1, 1],
+            mode="i_v",
+            index=index,
+            plain=plain,
+            inverse=True,
+            color="red",
+            label="I(V)",
         )
+        axs[1, 1] = self.ax_v_i(
+            ax=axs[1, 1],
+            mode="v_i",
+            index=index,
+            plain=plain,
+            inverse=True,
+            color="blue",
+            label="V(I)",
+        )
+        axs[1, 1].plot([0, 0], [0, 0], "white", label="T(K)", zorder=0)
+        T = self.get_T(index=index, plain=plain)
+        axs[1, 1].legend(
+            ["raw", "sampled", "$I(V)$", "$V(I)$", f"$T={T*1000:06.1f}$mK"],
+            fontsize=8,
+            loc="upper left",
+        )
+
         axs[0, 1] = self.ax_didv_v(
-            ax=axs[0, 1], index=0, plain=True, fig_nr=fig_nr, inverse=False
+            ax=axs[0, 1], index=index, plain=plain, inverse=False
         )
-        axs[1, 0] = self.ax_dvdi_i(
-            ax=axs[1, 0], index=0, plain=True, fig_nr=fig_nr, inverse=True
-        )
+        axs[1, 0] = self.ax_dvdi_i(ax=axs[1, 0], index=index, plain=plain, inverse=True)
 
         # modify
         axs[1, 0].xaxis.set_inverted(True)
@@ -1107,112 +1207,140 @@ class IVPlot(IVEvaluation, BasePlot):
         axs[1, 1].tick_params(left=True)
 
         # set limits
-        axs[0, 1].set_xlim(x_lim)
-        axs[0, 1].set_ylim(y_lim)
-        axs[1, 1].set_ylim(z_lim)
+        axs[1, 1].set_xlim(v_lim)
+        axs[1, 1].set_ylim(i_lim)
+        axs[0, 1].set_ylim(didv_lim)
+        axs[1, 0].set_xlim(dvdi_lim[::-1])
 
-        # axs[1, 1].sharex(axs[0, 1])
-        # axs[1, 1].sharey(axs[1, 0])
+        axs[1, 1].sharex(axs[0, 1])
+        axs[1, 1].sharey(axs[1, 0])
 
         return fig, axs
-
-    # def fig_ivs(
-    #     self,
-    #     index: int = 0,
-    #     plain: bool = False,
-    #     fig_nr: int = 0,
-    #     x_lim: tuple = (None, None),
-    #     y_lim: tuple = (None, None),
-    # ):
-    #     import numpy as np
-    #     import matplotlib.pyplot as plt
-    #     from matplotlib.animation import FuncAnimation
-
-    #     plt.close(fig_nr)
-    #     fig, ax = plt.subplots(
-    #         num=fig_nr,
-    #         nrows=1,
-    #         ncols=1,
-    #         figsize=self.fig_size,
-    #         dpi=self.dpi,
-    #         constrained_layout=True,
-    #     )
-
-    #     (line,) = ax.plot([], [], "r.")
-
-    #     i, v = self.get_i_v(index=0)
-
-    #     # get_norm
-    #     v_norm_value, v_norm_string = get_norm(v)
-    #     i_norm_value, i_norm_string = get_norm(i)
-
-    #     v /= v_norm_value
-
-    #     # Initialization function: plot empty frame
-    #     def init():
-    #         line.set_data(v, i / i_norm_value)
-    #         return (line,)
-
-    #     # set limits
-    #     ax.set_xlim(x_lim)
-    #     ax.set_ylim(y_lim)
-
-    #     def update(frame):
-    #         i, _ = self.get_i_v(index=frame)
-    #         line.set_data(v, i / i_norm_value)
-    #         return (line,)
-
-    #     frames = np.arange(self.mapped["y_axis"].shape[0])
-
-    #     ani = FuncAnimation(
-    #         fig, update, frames=frames, init_func=init, blit=False, interval=20
-    #     )
-    #     plt.show()
-    #     ani.save("sine_wave.mp4", fps=30)
-
-    #     return fig, ax
 
     # endregion
 
     # begin plot all
 
-    def plot_all(self, leading_index: int = 0):
-        i = 0
-        fig, axs = self.fig_didv_vy(z_lim=(None, None), fig_nr=leading_index + i)
+    def plot_all(
+        self,
+        y_lim: tuple[float | None, float | None] = (None, None),
+        v_lim: tuple[float | None, float | None] = (None, None),
+        i_lim: tuple[float | None, float | None] = (None, None),
+        T_lim: tuple[float | None, float | None] = (None, None),
+        didv_lim: tuple[float | None, float | None] = (None, None),
+        dvdi_lim: tuple[float | None, float | None] = (None, None),
+        didv_c_lim: tuple[float | None, float | None] = (None, None),
+        dvdi_c_lim: tuple[float | None, float | None] = (None, None),
+    ):
 
-        fig.suptitle(f"{self.sub_folder}/{self.title}/{self.title_of_plot}/didv_vy")
+        if self.plot_didvs:
+            if self.plot_T:
+                fig, axs = self.fig_didv_vy_T(
+                    v_lim=v_lim,
+                    y_lim=y_lim,
+                    didv_c_lim=didv_c_lim,
+                    T_lim=T_lim,
+                    fig_nr=self.plot_index,
+                )
+                fig.suptitle(
+                    f"{self.sub_folder}/{self.title}/{self.title_of_plot}/didv_vy_T"
+                )
+                self.saveFigure(
+                    fig, sub_title="didv_vy_T", sub_folder=self.title_of_plot
+                )
+                self.plot_index += 1
+            else:
+                fig, axs = self.fig_didv_vy(
+                    v_lim=v_lim,
+                    y_lim=y_lim,
+                    didv_c_lim=didv_c_lim,
+                    fig_nr=self.plot_index,
+                )
+                fig.suptitle(
+                    f"{self.sub_folder}/{self.title}/{self.title_of_plot}/didv_vy"
+                )
+                self.saveFigure(fig, sub_title="didv_vy", sub_folder=self.title_of_plot)
+                self.plot_index += 1
 
-        self.saveFigure(fig, sub_title="didv_vy", sub_folder=self.title_of_plot)
+        if self.plot_dvdis:
+            if self.plot_T:
+                fig, axs = self.fig_dvdi_iy_T(
+                    i_lim=i_lim,
+                    y_lim=y_lim,
+                    dvdi_c_lim=dvdi_c_lim,
+                    T_lim=T_lim,
+                    fig_nr=self.plot_index,
+                )
+                fig.suptitle(
+                    f"{self.sub_folder}/{self.title}/{self.title_of_plot}/dvdi_iy_T"
+                )
+                self.saveFigure(
+                    fig, sub_title="dvdi_iy_T", sub_folder=self.title_of_plot
+                )
+                self.plot_index += 1
+            else:
+                fig, axs = self.fig_dvdi_iy(
+                    i_lim=i_lim,
+                    y_lim=y_lim,
+                    dvdi_c_lim=dvdi_c_lim,
+                    fig_nr=self.plot_index,
+                )
+                fig.suptitle(
+                    f"{self.sub_folder}/{self.title}/{self.title_of_plot}/dvdi_iy"
+                )
+                self.saveFigure(fig, sub_title="dvdi_iy", sub_folder=self.title_of_plot)
+                self.plot_index += 1
 
-        i += 1
+        if self.plot_ivs:
+            logger.info("(%s) saveIVs()", self._iv_plot_name)
+            with suppress_logging():
+                try:
+                    fig, ax = self.fig_ididv_v(
+                        v_lim=v_lim,
+                        i_lim=i_lim,
+                        didv_lim=didv_lim,
+                        dvdi_lim=dvdi_lim,
+                        fig_nr=self.plot_index,
+                        plain=True,
+                    )
+                    fig.suptitle(
+                        f"{self.sub_folder}/{self.title}/{self.title_of_plot}/IV/0000_y=NAN",
+                        fontsize=8,
+                    )
+                    self.saveFigure(
+                        fig,
+                        sub_title=f"0000_y=NAN",
+                        sub_folder=f"{self.title_of_plot}/IV",
+                    )
+                    self.plot_index += 1
+                except KeyError:
+                    logger.warning(
+                        "(%s) No plain data available for %s",
+                        self._iv_plot_name,
+                        self.title_of_plot,
+                    )
+                    pass
 
-        fig, axs = self.fig_didv_vy_T(z_lim=(None, None), fig_nr=leading_index + i)
-
-        fig.suptitle(f"{self.sub_folder}/{self.title}/{self.title_of_plot}/didv_vy_T")
-
-        self.saveFigure(fig, sub_title="didv_vy_T", sub_folder=self.title_of_plot)
-
-        i += 1
-
-        fig, axs = self.fig_dvdi_iy(z_lim=(None, None), fig_nr=leading_index + i)
-
-        fig.suptitle(f"{self.sub_folder}/{self.title}/{self.title_of_plot}/dvdi_iy")
-
-        self.saveFigure(fig, sub_title="dvdi_iy", sub_folder=self.title_of_plot)
-
-        i += 1
-
-        fig, axs = self.fig_dvdi_iy_T(z_lim=(None, None), fig_nr=leading_index + i)
-
-        fig.suptitle(f"{self.sub_folder}/{self.title}/{self.title_of_plot}/dvdi_iy_T")
-
-        self.saveFigure(fig, sub_title="dvdi_iy_T", sub_folder=self.title_of_plot)
-
-        i += 1
-
-        # # get axs
-        # for index, y_value in enumerate(self.mapped["y_axis"]):
-        #     print(index, y_value)
+                for j, y in enumerate(tqdm(self.mapped["y_axis"])):
+                    fig, ax = self.fig_ididv_v(
+                        v_lim=v_lim,
+                        i_lim=i_lim,
+                        didv_lim=didv_lim,
+                        dvdi_lim=dvdi_lim,
+                        fig_nr=self.plot_index,
+                        plain=False,
+                        index=j,
+                    )
+                    fig.suptitle(
+                        f"{self.sub_folder}/{self.title}/{self.title_of_plot}/IV/{j+1:04d}_y={y:05.3f}",
+                        fontsize=8,
+                    )
+                    self.saveFigure(
+                        fig,
+                        sub_title=f"{j+1:04d}_y={y:05.3f}",
+                        sub_folder=f"{self.title_of_plot}/IV",
+                    )
+                    self.plot_index += 1
 
     # endregion
 
