@@ -62,7 +62,8 @@ c Some constants and parameters
        Rtol=(1.e-6,1.0)
        ierr=0
        if(temp.eq.0.0) temp = 1.e-7
-       iv=int((vf-vi)/vstep)
+      ! iv = step number
+       iv=int((vf-vi)/vstep)           
        thop = sqrt((2.0-trans-2.0*sqrt(1.0-trans))/trans)
 
 c Voltage loop
