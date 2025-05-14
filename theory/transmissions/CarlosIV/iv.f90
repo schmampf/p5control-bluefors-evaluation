@@ -153,13 +153,13 @@ complex function zintegrand(w)
 
       DO j=-nan,nan,2
             er(1,1,j) = 1.0 - t2*g0rr(1,1,j+1)*g0lr(1,1,j)
-            er(1,2,j) = -t2*g0rr(1,1,j+1)*g0lr(1,2,j)
-            er(2,1,j) = -t2*g0rr(2,2,j-1)*g0lr(2,1,j)
+            er(1,2,j) =     - t2*g0rr(1,1,j+1)*g0lr(1,2,j)
+            er(2,1,j) =     - t2*g0rr(2,2,j-1)*g0lr(2,1,j)
             er(2,2,j) = 1.0 - t2*g0rr(2,2,j-1)*g0lr(2,2,j)
 
             ea(1,1,j) = 1.0 - t2*g0ra(1,1,j+1)*g0la(1,1,j)
-            ea(1,2,j) = -t2*g0ra(1,1,j+1)*g0la(1,2,j)
-            ea(2,1,j) = -t2*g0ra(2,2,j-1)*g0la(2,1,j)
+            ea(1,2,j) =     - t2*g0ra(1,1,j+1)*g0la(1,2,j)
+            ea(2,1,j) =     - t2*g0ra(2,2,j-1)*g0la(2,1,j)
             ea(2,2,j) = 1.0 - t2*g0ra(2,2,j-1)*g0la(2,2,j)
 
             vpr(1,1,j) = t2*g0rr(1,2,j+1)*g0lr(2,1,j+2)
@@ -364,7 +364,8 @@ complex function zintegrand(w)
 end
 
 ! Calculate the inverse of a 2x2 matrix
-subroutine inv(a,ainv,n,ndim)
+subroutine 
+      inv(a,ainv,n,ndim)
       complex a(ndim,ndim),ainv(ndim,ndim),det
       integer n,ndim
 
