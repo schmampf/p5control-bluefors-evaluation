@@ -12,6 +12,7 @@ using LinearAlgebra
 const π::Real = 4.0 * atan(1.0)
 const η::Real = 0.000001
 const Δ::Real = 1.0
+const G_0::Real = 7.748091729e-5 # S # G_0=2e^2/h
 
 Base.@kwdef mutable struct VarPar
     max_ar::Int                     # The maximum number of MAR allowed by this simulation
