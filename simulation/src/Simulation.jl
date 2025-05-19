@@ -4,7 +4,7 @@ Cuevas et al., PRB (1996).
 https://journals.aps.org/prb/pdf/10.1103/PhysRevB.54.7366
 """
 module Simulation
-export num_MAR, ∫, VarPar
+export num_MAR, ∫, VarPar, integrand
 using Integrals
 using OffsetArrays
 using LinearAlgebra
@@ -47,10 +47,14 @@ function num_MAR(voltage::Real, param::VarPar)
 end
 
 function ∫(in::VarPar, curr_v::Real, req_MAR::Int, acc::Int=520)
+    # f(u, p) = integrand(in, u, curr_v, req_MAR, acc)
+    # domain = (in.w[1], in.w[2])
+    # prob = IntegralProblem(f, domain)
+    # sol = solve(prob, HCubatureJL(); reltol=1e-6, abstol=1e-8)
+
     f(u, p) = integrand(in, u, curr_v, req_MAR, acc)
-    domain = (in.w[1], in.w[2])
-    prob = IntegralProblem(f, domain)
-    sol = solve(prob, HCubatureJL(); reltol=1e-6, abstol=1e-8)
+    prob = IntegralProblem(f, (in.w[1], in.w[2]))
+    sol = solve(prob, QuadGKJL())
 
     return sol.u
 end
