@@ -40,6 +40,7 @@ utilities/__pycache__/
 *.hdf5
 *.csv
 *.dat
+*.pickle
 
 # specific files
 theory/MCBJ Render/MCBJ_seeblau_ultra.png
