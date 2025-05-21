@@ -408,12 +408,33 @@ class IVEvaluation(BaseEvaluation):
             v1 = np.array(measurement_data_sweep["V1"], dtype="float64")
             v2 = np.array(measurement_data_sweep["V2"], dtype="float64")
 
-        # Calculate V, I
-        v_raw = (v1 - v1_off) / self.voltage_amplification_1
+        # get amps
+        if self.voltage_amplification_1 is None or self.voltage_amplification_2 is None:
+            amp_1, amp_2 = self.get_amplification(time)
+        if self.voltage_amplification_1 is not None:
+            amp_1 = self.voltage_amplification_1
+        if self.voltage_amplification_2 is not None:
+            amp_2 = self.voltage_amplification_2
 
-        i_raw = (v2 - v2_off) / self.voltage_amplification_2 / self.reference_resistor
+        # Calculate V, I
+        v_raw = (v1 - v1_off) / amp_1
+        i_raw = (v2 - v2_off) / amp_2 / self.reference_resistor
 
         return v_raw, i_raw, trigger, time, v1_off, v2_off
+
+    def get_amplification(self, time: np.ndarray) -> tuple[int, int]:
+        """
+        retrieve the amplitudes amp1 and amp2 from self.amp_time, self.voltage_amplification_1, self.voltage_amplification_2
+        """
+        logger.debug("(%s) get_amplification(...)", self._iv_eva_name)
+
+        amp_1 = bin_y_over_x(self.amp_t, self.amp_1, time)
+        amp_2 = bin_y_over_x(self.amp_t, self.amp_2, time)
+        # find the value that appears most often in the array
+        amp_1 = int(np.nanmean(amp_1))
+        amp_2 = int(np.nanmean(amp_2))
+
+        return amp_1, amp_2
 
     def get_backup_temperatures(self):
         """
@@ -844,47 +865,6 @@ class IVEvaluation(BaseEvaluation):
                 dictionary["temperature_voltage"], axis=1
             )
 
-    def getMapsEvenSpaced(self, already_evaluated: list[dict]):
-        logger.info("(%s) getMapsAmplitude()", self._iv_eva_name)
-        evaluated = []
-        temp_yaxis = np.copy(self.y_axis)
-        self.y_axis = make_even_spaced(self.y_axis)
-        for index_to_evaluate, to_evaluate in enumerate(already_evaluated):
-            evaluated.append(self.get_empty_dictionary())
-            for string in [
-                "current",
-                "time_current",
-                "temperature_current",
-                "voltage",
-                "time_voltage",
-                "temperature_voltage",
-                "differential_conductance",
-                "differential_resistance",
-            ]:
-                (
-                    evaluated[index_to_evaluate][string],
-                    evaluated[index_to_evaluate][f"{string}_counter"],
-                ) = bin_z_over_y(
-                    temp_yaxis,
-                    to_evaluate[string],
-                    self.y_axis,
-                )
-            for string in [
-                "temperature",
-                "time_start",
-                "time_stop",
-            ]:
-
-                (
-                    evaluated[index_to_evaluate][string],
-                    evaluated[index_to_evaluate][f"{string}_counter"],
-                ) = bin_y_over_x(
-                    temp_yaxis,
-                    to_evaluate[string],
-                    self.y_axis,
-                )
-        return tuple(evaluated)
-
     # endregion
 
     # region main functions
@@ -1142,6 +1122,47 @@ class IVEvaluation(BaseEvaluation):
                     self.temperature_axis,
                 )
 
+        return tuple(evaluated)
+
+    def getMapsEvenSpaced(self, already_evaluated: list[dict]):
+        logger.info("(%s) getMapsAmplitude()", self._iv_eva_name)
+        evaluated = []
+        temp_yaxis = np.copy(self.y_axis)
+        self.y_axis = make_even_spaced(self.y_axis)
+        for index_to_evaluate, to_evaluate in enumerate(already_evaluated):
+            evaluated.append(self.get_empty_dictionary())
+            for string in [
+                "current",
+                "time_current",
+                "temperature_current",
+                "voltage",
+                "time_voltage",
+                "temperature_voltage",
+                "differential_conductance",
+                "differential_resistance",
+            ]:
+                (
+                    evaluated[index_to_evaluate][string],
+                    evaluated[index_to_evaluate][f"{string}_counter"],
+                ) = bin_z_over_y(
+                    temp_yaxis,
+                    to_evaluate[string],
+                    self.y_axis,
+                )
+            for string in [
+                "temperature",
+                "time_start",
+                "time_stop",
+            ]:
+
+                (
+                    evaluated[index_to_evaluate][string],
+                    evaluated[index_to_evaluate][f"{string}_counter"],
+                ) = bin_y_over_x(
+                    temp_yaxis,
+                    to_evaluate[string],
+                    self.y_axis,
+                )
         return tuple(evaluated)
 
     # endregion
