@@ -713,7 +713,11 @@ class IVEvaluation(BaseEvaluation):
                 upsample=1000,
             )
 
-    def sort_mapped_over_y(self, y_bounds: list[int]):
+    def sort_y_axis(
+        self,
+        y_bounds: tuple[int, int] | None = None,
+        y_lim: tuple[float, float] | None = None,
+    ):
         """
         Sorts the mapped data based on the y-axis values and applies optional bounds.
 
@@ -723,119 +727,28 @@ class IVEvaluation(BaseEvaluation):
             A list containing two integers defining the lower and upper bounds for selecting
             a subset of the sorted y-axis data.
         """
-        logger.debug("(%s) sort_mapped_over_y(%s)", self._iv_eva_name, y_bounds)
+        logger.debug("(%s) sort_by_y(%s)", self._iv_eva_name, y_bounds)
 
         # Sort indices based on y_unsorted values
         indices = np.argsort(self.y_unsorted)
 
         # Apply sorting to y-related data
-        self.y_axis = self.y_unsorted[indices]
-        self.voltage_offset_1 = self.voltage_offset_1[indices]
-        self.voltage_offset_2 = self.voltage_offset_2[indices]
+        self.y_unsorted = self.y_unsorted[indices]
+        self.specific_keys = [self.specific_keys[i] for i in indices]
+
+        # Apply optional y-axis limits if provided
+        if y_lim is not None:
+            y_bounds = (
+                int(np.argmin(np.abs(self.y_unsorted - y_lim[0]))),
+                int(np.argmin(np.abs(self.y_unsorted - y_lim[1]))),
+            )
 
         # Apply optional y-axis bounds if provided
-        if y_bounds:
-            lower, upper = y_bounds
-            self.y_axis = self.y_axis[lower:upper]
-            self.voltage_offset_1 = self.voltage_offset_1[lower:upper]
-            self.voltage_offset_2 = self.voltage_offset_2[lower:upper]
-        return indices
+        if y_bounds is not None:
+            self.y_unsorted = self.y_unsorted[y_bounds[0] : y_bounds[1]]
+            self.specific_keys = self.specific_keys[y_bounds[0] : y_bounds[1]]
 
-    def sort_dictionary_over_y(
-        self,
-        indices: np.ndarray,
-        y_bounds: list[int],
-        dictionary: dict,
-    ):
-        """
-        Sorts the data in the dictionary based on the provided indices and applies optional
-        y-axis bounds to the data.
-
-        Parameters
-        ----------
-        indices : np.ndarray
-            An array of indices to reorder the data in the dictionary.
-        y_bounds : list[int]
-            A list containing two integers defining the lower and upper bounds for selecting
-            a subset of the sorted data.
-        dictionary : dict
-            The dictionary containing the data to be sorted. Keys include 'time_start', 'time_stop',
-            'current', 'voltage', etc., with values to be reordered and optionally truncated by bounds.
-        """
-        logger.debug(
-            "(%s) sort_dictionary_over_y(%s, %s, %s)",
-            self._iv_eva_name,
-            indices,
-            y_bounds,
-            dictionary,
-        )
-        # if y_bounds:
-        #     lower, upper = y_bounds
-        #     indices = indices[lower:upper]
-
-        # Sort time-related entries in the dictionary
-        # sorted_data = [data[i] for i in sorted_indices]
-
-        dictionary["iv_tuples"] = [dictionary["iv_tuples"][i] for i in indices]
-        dictionary["iv_tuples_raw"] = [dictionary["iv_tuples_raw"][i] for i in indices]
-        dictionary["time_start"] = dictionary["time_start"][indices]
-        dictionary["time_stop"] = dictionary["time_stop"][indices]
-        dictionary["downsample_frequency"] = dictionary["downsample_frequency"][indices]
-
-        # Apply optional y-axis bounds for time
-        if y_bounds:
-            lower, upper = y_bounds
-            dictionary["time_start"] = dictionary["time_start"][lower:upper]
-            dictionary["time_stop"] = dictionary["time_stop"][lower:upper]
-            dictionary["downsample_frequency"] = dictionary["downsample_frequency"][
-                lower:upper
-            ]
-
-        # Sort current-related data if eva_current is True
-        if self.eva_current:
-            dictionary["current"] = dictionary["current"][indices, :]
-            dictionary["time_current"] = dictionary["time_current"][indices, :]
-
-            # Sort temperature-related data for current if eva_temperature is True
-            if self.eva_temperature:
-                dictionary["temperature_current"] = dictionary["temperature_current"][
-                    indices, :
-                ]
-
-            # Apply y-axis bounds for current and time_current
-            if y_bounds:
-                lower, upper = y_bounds
-                dictionary["current"] = dictionary["current"][lower:upper, :]
-                dictionary["time_current"] = dictionary["time_current"][lower:upper, :]
-
-                # Apply bounds for temperature_current if eva_temperature is True
-                if self.eva_temperature:
-                    dictionary["temperature_current"] = dictionary[
-                        "temperature_current"
-                    ][lower:upper, :]
-
-        # Sort voltage-related data if eva_voltage is True
-        if self.eva_voltage:
-            dictionary["voltage"] = dictionary["voltage"][indices, :]
-            dictionary["time_voltage"] = dictionary["time_voltage"][indices, :]
-
-            # Sort temperature-related data for voltage if eva_temperature is True
-            if self.eva_temperature:
-                dictionary["temperature_voltage"] = dictionary["temperature_voltage"][
-                    indices, :
-                ]
-
-            # Apply y-axis bounds for voltage and time_voltage
-            if y_bounds:
-                lower, upper = y_bounds
-                dictionary["voltage"] = dictionary["voltage"][lower:upper, :]
-                dictionary["time_voltage"] = dictionary["time_voltage"][lower:upper, :]
-
-                # Apply bounds for temperature_voltage if eva_temperature is True
-                if self.eva_temperature:
-                    dictionary["temperature_voltage"] = dictionary[
-                        "temperature_voltage"
-                    ][lower:upper, :]
+        self.y_axis = self.y_unsorted
 
     def get_differentials(self, dictionary: dict):
         """
@@ -955,8 +868,11 @@ class IVEvaluation(BaseEvaluation):
         return single_iv
 
     def getMaps(
-        self, trigger_indices: list[int,] = [1], y_bounds: list[int] = []
-    ) -> tuple[dict] | None:
+        self,
+        trigger_indices: list[int,] = [1],
+        y_bounds: tuple[int, int] | None = None,
+        y_lim: tuple[float, float] | None = None,
+    ) -> tuple[dict, ...] | None:
         """
         Processes IV measurement data and returns mapped quantities over a linear voltage axis.
 
@@ -989,7 +905,7 @@ class IVEvaluation(BaseEvaluation):
         self.voltage_offset_2 = np.full(len_y, np.nan, dtype="float64")
 
         # Precompute sorting indices along the y-axis
-        sort_indices = self.sort_mapped_over_y(y_bounds)
+        self.sort_y_axis(y_bounds, y_lim)
 
         # Determine whether temperature data is available
         has_temp_data = self.check_for_temperatures(self.specific_keys[0])
@@ -1050,11 +966,6 @@ class IVEvaluation(BaseEvaluation):
                         temporary_time,
                         temporary_temperature,
                     )
-
-            # Apply sorting to the data based on y-axis order
-            self.sort_dictionary_over_y(
-                sort_indices, y_bounds, evaluated[i_trigger_index]
-            )
 
             # Calculate differential conductance and resistance
             self.get_differentials(evaluated[i_trigger_index])
