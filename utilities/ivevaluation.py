@@ -31,6 +31,7 @@ Date: 2025-04-01
 
 # region imports
 
+import os
 import sys
 import logging
 import importlib
@@ -370,8 +371,11 @@ class IVEvaluation(BaseEvaluation):
             self._iv_eva_name,
             specific_key,
         )
-
-        file_name = f"{self.file_directory}{self.file_folder}{self.file_name}"
+        file_name = os.path.join(
+            self.file_directory,
+            self.file_folder,
+            self.file_name,
+        )
 
         with File(file_name, "r") as data_file:
             # Retrieve Offset Dataset
@@ -448,7 +452,11 @@ class IVEvaluation(BaseEvaluation):
             temperature : np.ndarray
                 Array of corresponding temperature values.
         """
-        file_name = f"{self.file_directory}{self.file_folder}{self.file_name}"
+        file_name = os.path.join(
+            self.file_directory,
+            self.file_folder,
+            self.file_name,
+        )
         with File(file_name, "r") as data_file:
             status = np.array(data_file.get("status/bluefors/temperature/MCBJ"))
             time = status["time"]
@@ -469,7 +477,11 @@ class IVEvaluation(BaseEvaluation):
         bool
             True if Bluefors temperature data is available, False otherwise.
         """
-        file_name = f"{self.file_directory}{self.file_folder}{self.file_name}"
+        file_name = os.path.join(
+            self.file_directory,
+            self.file_folder,
+            self.file_name,
+        )
         with File(file_name, "r") as data_file:
             check = data_file.__contains__(
                 f"measurement/{self.measurement_key}/{key}/sweep/bluefors"
@@ -493,7 +505,11 @@ class IVEvaluation(BaseEvaluation):
             temperature : np.ndarray
                 Array of corresponding temperature values.
         """
-        file_name = f"{self.file_directory}{self.file_folder}{self.file_name}"
+        file_name = os.path.join(
+            self.file_directory,
+            self.file_folder,
+            self.file_name,
+        )
         with File(file_name, "r") as data_file:
             bluefors = np.array(
                 data_file.get(

@@ -36,14 +36,13 @@ A typical workflow might include:
    evaluator = BaseEvaluation(name="Test Evaluation")
 """
 
+import os
 import logging
 import numpy as np
 import matplotlib.pyplot as plt
 from h5py import File
 
 from utilities.baseclass import BaseClass
-from utilities.ivevaluation import bin_y_over_x
-from utilities.key_database import POSSIBLE_MEASUREMENT_KEYS
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +71,6 @@ class BaseEvaluation(BaseClass):
         self._base_eva_name = name
 
         BaseClass.__init__(self)
-
-        # initialize key lists
-        self.possible_measurement_keys = POSSIBLE_MEASUREMENT_KEYS
 
         # initialize base_evaluation stuff
         self.base_evaluation = {
@@ -182,8 +178,11 @@ class BaseEvaluation(BaseClass):
         Lists all available measurements in the file.
         """
         logger.debug("(%s) showMeasurements()", self._base_eva_name)
-
-        file_name = self.file_directory + self.file_folder + self.file_name
+        file_name = os.path.join(
+            self.file_directory,
+            self.file_folder,
+            self.file_name,
+        )
         with File(file_name, "r") as data_file:
             measurements = list(data_file["measurement"].keys())  # type: ignore
             logger.info("(%s) Available measurements:", self._base_eva_name)
@@ -204,7 +203,11 @@ class BaseEvaluation(BaseClass):
         """
         logger.debug("(%s) setMeasurement('%s')", self._base_eva_name, measurement_key)
 
-        file_name = self.file_directory + self.file_folder + self.file_name
+        file_name = os.path.join(
+            self.file_directory,
+            self.file_folder,
+            self.file_name,
+        )
         with File(file_name, "r") as data_file:
             try:
                 measurement_data = data_file.get(f"measurement/{measurement_key}")
@@ -478,26 +481,3 @@ class BaseEvaluation(BaseClass):
         """set y_unsorted"""
         self.base_evaluation["y_unsorted"] = y_unsorted
         logger.debug("(%s) y_unsorted = %s", self._base_eva_name, y_unsorted)
-
-
-'''
-    def accessFile(self) -> File:
-        """
-        Opens the HDF5 file for reading.
-
-        Returns:
-        - File: The opened HDF5 file object.
-
-        Raises:
-        - AttributeError: If the file cannot be found.
-        """
-        logger.debug("(%s) accessFile()", self._base_eva_name)
-        try:
-            file_name = self.file_directory + self.file_folder + self.file_name
-            return File(file_name, "r")
-        except AttributeError:
-            logger.error("(%s) File cannot be found!", self._base_eva_name)
-            raise
-
-
-'''
