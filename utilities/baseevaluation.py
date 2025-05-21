@@ -42,6 +42,7 @@ import matplotlib.pyplot as plt
 from h5py import File
 
 from utilities.baseclass import BaseClass
+from utilities.ivevaluation import bin_y_over_x
 from utilities.key_database import POSSIBLE_MEASUREMENT_KEYS
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,9 @@ class BaseEvaluation(BaseClass):
         self.base_evaluation = {
             "voltage_amplification_1": 1,
             "voltage_amplification_2": 1,
+            "amp_t": np.array([]),
+            "amp_1": np.array([]),
+            "amp_2": np.array([]),
             "reference_resistor": 51.689e3,
             "index_trigger_up": 1,
             "index_trigger_down": 2,
@@ -90,11 +94,14 @@ class BaseEvaluation(BaseClass):
 
         logger.info("(%s) ... BaseEvaluation initialized.", self._base_eva_name)
 
-    def showAmplifications(self) -> None:
+    def getAmplifications(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Plots the voltage amplification over time for the entire measurement.
+        Retrieves the voltage amplification values for both channels.
+
+        Returns:
+        - list: A list containing the voltage amplification values for both channels.
         """
-        logger.debug("(%s) showAmplifications()", self._base_eva_name)
+        logger.debug("(%s) getAmplifications()", self._base_eva_name)
         file_name = f"{self.file_directory}{self.file_folder}{self.file_name}"
 
         with File(file_name, "r") as data_file:
@@ -105,21 +112,35 @@ class BaseEvaluation(BaseClass):
                 femto_key = "femtos"
             else:
                 logger.error("(%s) ...femto(s) status not found.", self._base_eva_name)
-                return
+                raise
 
             femto_data = np.array(data_file[f"status/{femto_key}"])
+
+        return (
+            np.array(femto_data["time"]),
+            np.array(femto_data["amp_A"], dtype=int),
+            np.array(femto_data["amp_B"], dtype=int),
+        )
+
+    def showAmplifications(self) -> None:
+        """
+        Plots the voltage amplification over time for the entire measurement.
+        """
+        logger.debug("(%s) showAmplifications()", self._base_eva_name)
+
+        self.amp_t, self.amp_1, self.amp_2 = self.getAmplifications()
 
         plt.close(1000)
         plt.figure(1000, figsize=(6, 1.5))
         plt.semilogy(
-            femto_data["time"],
-            femto_data["amp_A"],
+            self.amp_t,
+            self.amp_1,
             "-",
             label="Voltage Amplification 1",
         )
         plt.semilogy(
-            femto_data["time"],
-            femto_data["amp_B"],
+            self.amp_t,
+            self.amp_2,
             "--",
             label="Voltage Amplification 2",
         )
@@ -131,8 +152,8 @@ class BaseEvaluation(BaseClass):
         plt.show()
 
     def setAmplifications(
-        self, voltage_amplification_1: int, voltage_amplification_2: int
-    ) -> None:
+        self, voltage_amplification_1: int | None, voltage_amplification_2: int | None
+    ):
         """
         Sets the amplification factors for voltage calculations.
 
@@ -149,21 +170,12 @@ class BaseEvaluation(BaseClass):
             voltage_amplification_1,
             voltage_amplification_2,
         )
+
         self.voltage_amplification_1 = voltage_amplification_1
         self.voltage_amplification_2 = voltage_amplification_2
 
-    def showMeasurements(self) -> None:
-        """
-        Lists all available measurements in the file.
-        """
-        logger.debug("(%s) showMeasurements()", self._base_eva_name)
-
-        file_name = self.file_directory + self.file_folder + self.file_name
-        with File(file_name, "r") as data_file:
-            measurements = list(data_file["measurement"].keys())  # type: ignore
-            logger.info("(%s) Available measurements:", self._base_eva_name)
-            for m in measurements:
-                logger.info("%s", m)
+        if voltage_amplification_1 is None or voltage_amplification_2 is None:
+            self.amp_t, self.amp_1, self.amp_2 = self.getAmplifications()
 
     def setMeasurement(self, measurement_key: str) -> None:
         """
@@ -297,12 +309,57 @@ class BaseEvaluation(BaseClass):
     ### base_evaluation Properties ###
 
     @property
+    def amp_t(self):
+        """get amp_t"""
+        return self.base_evaluation["amp_t"]
+
+    @amp_t.setter
+    def amp_t(self, amp_t: np.ndarray):
+        """set amp_t"""
+        self.base_evaluation["amp_t"] = amp_t
+        logger.debug(
+            "(%s) amp_t = %s",
+            self._base_eva_name,
+            amp_t,
+        )
+
+    @property
+    def amp_1(self):
+        """get amp_1"""
+        return self.base_evaluation["amp_1"]
+
+    @amp_1.setter
+    def amp_1(self, amp_1: np.ndarray):
+        """set amp_1"""
+        self.base_evaluation["amp_1"] = amp_1
+        logger.debug(
+            "(%s) amp_1 = %s",
+            self._base_eva_name,
+            amp_1,
+        )
+
+    @property
+    def amp_2(self):
+        """get amp_2"""
+        return self.base_evaluation["amp_2"]
+
+    @amp_2.setter
+    def amp_2(self, amp_2: np.ndarray):
+        """set amp_2"""
+        self.base_evaluation["amp_2"] = amp_2
+        logger.debug(
+            "(%s) amp_2 = %s",
+            self._base_eva_name,
+            amp_2,
+        )
+
+    @property
     def voltage_amplification_1(self):
         """get voltage_amplification_1"""
         return self.base_evaluation["voltage_amplification_1"]
 
     @voltage_amplification_1.setter
-    def voltage_amplification_1(self, voltage_amplification_1: int):
+    def voltage_amplification_1(self, voltage_amplification_1: int | None):
         """set voltage_amplification_1"""
         self.base_evaluation["voltage_amplification_1"] = voltage_amplification_1
         logger.debug(
@@ -317,7 +374,7 @@ class BaseEvaluation(BaseClass):
         return self.base_evaluation["voltage_amplification_2"]
 
     @voltage_amplification_2.setter
-    def voltage_amplification_2(self, voltage_amplification_2: int):
+    def voltage_amplification_2(self, voltage_amplification_2: int | None):
         """set voltage_amplification_2"""
         self.base_evaluation["voltage_amplification_2"] = voltage_amplification_2
         logger.debug(
