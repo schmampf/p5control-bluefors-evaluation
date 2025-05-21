@@ -177,6 +177,19 @@ class BaseEvaluation(BaseClass):
         if voltage_amplification_1 is None or voltage_amplification_2 is None:
             self.amp_t, self.amp_1, self.amp_2 = self.getAmplifications()
 
+    def showMeasurements(self) -> None:
+        """
+        Lists all available measurements in the file.
+        """
+        logger.debug("(%s) showMeasurements()", self._base_eva_name)
+
+        file_name = self.file_directory + self.file_folder + self.file_name
+        with File(file_name, "r") as data_file:
+            measurements = list(data_file["measurement"].keys())  # type: ignore
+            logger.info("(%s) Available measurements:", self._base_eva_name)
+            for m in measurements:
+                logger.info('- "%s"', m)
+
     def setMeasurement(self, measurement_key: str) -> None:
         """
         Sets the measurement key, which is required for further evaluation.
