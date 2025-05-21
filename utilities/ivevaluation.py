@@ -938,7 +938,9 @@ class IVEvaluation(BaseEvaluation):
         # Return the dictionary with the binned and calculated data
         return single_iv
 
-    def getMaps(self, trigger_indices: list[int] = [1], y_bounds: list[int] = []):
+    def getMaps(
+        self, trigger_indices: list[int,] = [1], y_bounds: list[int] = []
+    ) -> tuple[dict] | None:
         """
         Processes IV measurement data and returns mapped quantities over a linear voltage axis.
 
