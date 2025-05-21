@@ -110,6 +110,9 @@ class IVEvaluation(BaseEvaluation):
             "eva_even_spaced": False,
         }
 
+        self.temperature_t: np.ndarray | None = None
+        self.temperature_T: np.ndarray | None = None
+
         self.index_trigger: int = 1
         self.evaluated = self.get_empty_dictionary()
 
@@ -342,6 +345,44 @@ class IVEvaluation(BaseEvaluation):
     # endregion
 
     # region internal functions
+
+    def getBackupTemperature(self):
+        """
+        Retrieves backup temperature data from status.
+
+        Returns
+        -------
+        tuple of np.ndarray
+            time : np.ndarray
+                Array of time values.
+            temperature : np.ndarray
+                Array of corresponding temperature values.
+        """
+        logger.info("(%s) getBackupTemperature()", self._iv_eva_name)
+        file_name = os.path.join(
+            self.file_directory,
+            self.file_folder,
+            self.file_name,
+        )
+        with File(file_name, "r") as data_file:
+            status = np.array(data_file.get("status/bluefors/temperature/MCBJ"))
+            self.temperature_t = status["time"]
+            self.temperature_T = status["T"]
+
+    def get_amplification(self, time: np.ndarray) -> tuple[int, int]:
+        """
+        retrieve the amplitudes amp1 and amp2 from self.amp_time, self.voltage_amplification_1, self.voltage_amplification_2
+        """
+        logger.debug("(%s) get_amplification(...)", self._iv_eva_name)
+
+        amp_1 = bin_y_over_x(self.amp_t, self.amp_1, time)
+        amp_2 = bin_y_over_x(self.amp_t, self.amp_2, time)
+        # find the value that appears most often in the array
+        amp_1 = int(np.nanmean(amp_1))
+        amp_2 = int(np.nanmean(amp_2))
+
+        return amp_1, amp_2
+
     def get_current_voltage(self, specific_key: str = ""):
         """
         Retrieves and processes current and voltage data from an HDF5 file.
@@ -425,43 +466,6 @@ class IVEvaluation(BaseEvaluation):
         i_raw = (v2 - v2_off) / amp_2 / self.reference_resistor
 
         return v_raw, i_raw, trigger, time, v1_off, v2_off
-
-    def get_amplification(self, time: np.ndarray) -> tuple[int, int]:
-        """
-        retrieve the amplitudes amp1 and amp2 from self.amp_time, self.voltage_amplification_1, self.voltage_amplification_2
-        """
-        logger.debug("(%s) get_amplification(...)", self._iv_eva_name)
-
-        amp_1 = bin_y_over_x(self.amp_t, self.amp_1, time)
-        amp_2 = bin_y_over_x(self.amp_t, self.amp_2, time)
-        # find the value that appears most often in the array
-        amp_1 = int(np.nanmean(amp_1))
-        amp_2 = int(np.nanmean(amp_2))
-
-        return amp_1, amp_2
-
-    def get_backup_temperatures(self):
-        """
-        Retrieves backup temperature data from status.
-
-        Returns
-        -------
-        tuple of np.ndarray
-            time : np.ndarray
-                Array of time values.
-            temperature : np.ndarray
-                Array of corresponding temperature values.
-        """
-        file_name = os.path.join(
-            self.file_directory,
-            self.file_folder,
-            self.file_name,
-        )
-        with File(file_name, "r") as data_file:
-            status = np.array(data_file.get("status/bluefors/temperature/MCBJ"))
-            time = status["time"]
-            temperature = status["T"]
-            return time, temperature
 
     def check_for_temperatures(self, key: str):
         """
@@ -644,8 +648,8 @@ class IVEvaluation(BaseEvaluation):
         self,
         index: int,
         dictionary: dict,
-        temporary_time: np.ndarray,
-        temporary_temperature: np.ndarray,
+        temporary_time: np.ndarray | None,
+        temporary_temperature: np.ndarray | None,
     ):
         """
         Performs binning of temperature data along current and voltage axes.
@@ -663,6 +667,9 @@ class IVEvaluation(BaseEvaluation):
         """
 
         logger.debug("(%s) get_temperature_binning_done(...)", self._iv_eva_name)
+
+        if temporary_time is None or temporary_temperature is None:
+            raise ValueError("Temporary time and temperature arrays must not be None.")
 
         if self.eva_current:
             # Fit a linear time axis for the current data
@@ -711,6 +718,7 @@ class IVEvaluation(BaseEvaluation):
                 temporary_temperature[indices],
                 temporary_time_voltage,
                 upsample=1000,
+                upsample_method="nearest",
             )
 
     def sort_y_axis(
@@ -851,7 +859,9 @@ class IVEvaluation(BaseEvaluation):
                 time, temperature = self.get_sweep_temperatures(y_key)
             else:
                 # Otherwise, use the backup temperature data
-                time, temperature = self.get_backup_temperatures()
+                if self.temperature_t is None:
+                    self.getBackupTemperature()
+                time, temperature = self.temperature_t, self.temperature_T
 
             # Bin the temperature data
             self.get_temperature_binning_done(
@@ -908,10 +918,10 @@ class IVEvaluation(BaseEvaluation):
         self.sort_y_axis(y_bounds, y_lim)
 
         # Determine whether temperature data is available
-        has_temp_data = self.check_for_temperatures(self.specific_keys[0])
-        if not has_temp_data:
-            # Fallback to backup temperature data
-            temporary_time, temporary_temperature = self.get_backup_temperatures()
+        check_sweep_temperature = self.check_for_temperatures(self.specific_keys[0])
+        if not check_sweep_temperature:
+            if self.temperature_t is None:
+                self.getBackupTemperature()
 
         evaluated = []
         for i_trigger_index, trigger_index in enumerate(trigger_indices):
@@ -953,18 +963,19 @@ class IVEvaluation(BaseEvaluation):
 
                 # If temperature evaluation is enabled
                 if self.eva_temperature:
-                    if has_temp_data:
+                    if check_sweep_temperature:
                         # Get temperature data for this key
-                        temporary_time, temporary_temperature = (
-                            self.get_sweep_temperatures(key)
-                        )
+                        temp_t, temp_T = self.get_sweep_temperatures(key)
+                    else:
+                        # Get Backup temperature data
+                        temp_t, temp_T = self.temperature_t, self.temperature_T
 
                     # Bin temperature data
                     self.get_temperature_binning_done(
                         index,
                         evaluated[i_trigger_index],
-                        temporary_time,
-                        temporary_temperature,
+                        temp_t,
+                        temp_T,
                     )
 
             # Calculate differential conductance and resistance
