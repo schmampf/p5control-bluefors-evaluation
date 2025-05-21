@@ -32,6 +32,7 @@ import pickle
 import logging
 import platform
 from importlib import reload
+from h5py import File, Dataset, Group
 from qtpy.QtWidgets import QApplication
 from qtpy.QtGui import QIcon
 from hdf5view.mainwindow import MainWindow
@@ -40,6 +41,13 @@ from hdf5view.mainwindow import MainWindow
 reload(logging)
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
+
+
+def print_info(name, obj):
+    if isinstance(obj, Dataset):
+        logger.info(f"{name} {obj.shape} {obj.dtype}")
+    # elif isinstance(obj, Group):
+    #     logger.info(f"{name}/")
 
 
 class BaseClass:
@@ -78,6 +86,19 @@ class BaseClass:
             "file_name": "",
         }
         logger.info("(%s) ... BaseClass initialized.", self._base_name)
+
+    def showStatus(self) -> None:
+        """
+        Lists all available Status in the file.
+        """
+        logger.info("(%s) showStatus()", self._base_name)
+        file_name = os.path.join(
+            self.file_directory,
+            self.file_folder,
+            self.file_name,
+        )
+        with File(file_name, "r") as data_file:
+            data_file["status"].visititems(print_info)
 
     def showFile(self):
         """
