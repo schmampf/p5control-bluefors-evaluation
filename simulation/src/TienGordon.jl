@@ -6,56 +6,31 @@ export I
 
 #-constants-------------
 const e = 1.602176634e-19 # C
-const ħ = 1.054571817e-34 # Js
+const h = 6.62607015e-34 # Js
+const ħ = h / (2 * π) # Js
 #-----------------------
 #-variables-------------
 ν = 1.0
-extend = false
+Δ = 1.0
 I0 = []
 V0 = []
-n = 200
+n = 0
+m = 1.0
+itp = nothing
 #-----------------------
 
 const data_dir = joinpath(@__DIR__, "..", "data")
 
-# find a value in y for a value in x
-# if no direct match is found extrapolate from the closest
-function findVal(query::Real, x::Array{Float64}, y::Array{Float64})
-    for (i, val) in enumerate(x)
-        if val < query
-            continue
-        elseif val == query
-            return y[i]
-        elseif val > query
-            x_c, y_c = x[i], y[i]
-
-            if i <= 1
-                return y_c
-            end
-
-            x_p, y_p = x[i-1], y[i-1]
-            x_diff = x_c - query
-            y_diff = y_c - y_p
-            return y_p + (y_diff * (x_diff / (x_c - x_p)))
-        end
-    end
-
-    if query > x[end]
-        return y[end]
-    end
-
-    throw(ArgumentError("Query value $query not found in x array."))
-end
-
 function set_τ(τ::Real)
-    global V0, I0
+    global V0, I0, itp
     data = jldopen(data_dir * "/iv.jld2", "r")
     v, i = data["normalized"][τ]
     V0, I0 = v, i
-    if extend
-        V0 = vcat(reverse(V0) .* -1, V0)
-        I0 = vcat(reverse(I0) .* -1, I0)
-    end
+    V0 = vcat(-reverse(V0), V0)
+    I0 = vcat(-reverse(I0), I0)
+
+    itp = linear_interpolation(V0, I0, extrapolation_bc=Line())
+
     return τ
 end
 
@@ -71,17 +46,17 @@ function save_curve(τ::Real)
 end
 
 function IV₀(V₀::Real, Vω::Real)
-    global ν, I0, V0, n
+    global ν, I0, V0, n, m, Δ
 
     ω = 2 * π * ν
-    b_arg = (e * Vω) / (ħ * ω) / 10000
+    b_arg = (e * Vω) / (ħ * ω)
 
     out = 0.0
-    for ni in -n:n
-        bessel = (SF.besselj(ni, b_arg))^2
-        V_shift = V₀ - (ni * ħ * ω) / (e)
-        V_shift = abs(V_shift) # symmetry around the y axis
-        I = findVal(V_shift, V0, I0)
+
+    for mi in 1:m, ni in -n:n
+        bessel = (SF.besselj(ni, mi * Vω))^2
+        V_shift = V₀ - (ni * ħ * ω) / (mi * Δ * e)
+        I = itp(V_shift)
         out += I * bessel
     end
     return out
