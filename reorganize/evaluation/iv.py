@@ -168,6 +168,7 @@ class SliceResult:
     processed_sets: dict[str, DataSet] = field(
         default_factory=dict
     )  # data after processing
+    persistent_sets: dict[str, DataSet] = field(default_factory=dict)
 
 
 @dataclass
