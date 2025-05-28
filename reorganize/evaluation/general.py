@@ -160,8 +160,8 @@ class MeasurementHeader:
 
     @staticmethod
     def parse_number(s: str) -> tuple:  # "Sign0.01Unit" -> (0.01, "Unit")
-
-        s = s.split("=")[1]
+        if "=" in s:
+            s = s.split("=")[1]
         s = s.replace(" ", "")
 
         def isDigit(s: str) -> bool:
