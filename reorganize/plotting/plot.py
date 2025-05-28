@@ -10,6 +10,7 @@ import numpy as np
 # local
 import utilities.logging as Logger
 from integration.files import DataCollection
+from .corporate_design_colors_v4 import cmap
 
 # endregion
 
@@ -117,9 +118,13 @@ def map(bib: DataCollection, type: list[str], styling: list[dict[StyleKeys, Any]
                     ycoords = ycoords_def * scale[1]
                     map.values = map_def.values * scale[2]
 
+                scmap = style.get(CMAP, "viridis")
+                if scmap in ["seeblau"]:
+                    scmap = cmap()
+
                 plt.imshow(
                     map.values,
-                    cmap=style.get(CMAP, "viridis"),
+                    cmap=scmap,
                     interpolation=style.get(INTERPOL, None),
                     aspect=style.get(ASPECT, "auto"),
                     extent=(
