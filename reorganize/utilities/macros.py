@@ -9,6 +9,7 @@ from integration.files import DataCollection
 import utilities.logging as Logger
 import evaluation.general as GenEval
 import evaluation.iv as IVEval
+import evaluation.normalization as Norm
 
 # endregion
 
@@ -70,6 +71,9 @@ def bulk_eval(bib: DataCollection):
         d_cond = bib.evaluation.cached_sets["diffs"].curves["diff_conductance"]
         m_temp = bib.evaluation.cached_sets["diffs"].curves["mean_temp"]
 
+        if i == 0:
+            Norm.normalize(bib)
+
         VXI[i, :] = np.array(iv, dtype=float)
         IXV[i, :] = np.array(vi, dtype=float)
         dIXR[i, :] = np.array(d_res, dtype=float)
@@ -83,10 +87,13 @@ def bulk_eval(bib: DataCollection):
         for l in bib.params.available_measurement_entries_labels
     ]
 
+    v_norm = bib.evaluation.persistent_sets["norm"].curves["voltage-bin"]
+
     result["VXI"] = IVEval.Map(
         x_axis=IVEval.Axis(
             name=r"Voltage ($V$)",
             values=v_b,
+            # values=v_norm,
         ),
         y_axis=IVEval.Axis(
             name="X",
@@ -123,6 +130,7 @@ def bulk_eval(bib: DataCollection):
         x_axis=IVEval.Axis(
             name=r"Voltage (V)",
             values=v_b,
+            # values=v_norm,
         ),
         y_axis=IVEval.Axis(
             name="X",
