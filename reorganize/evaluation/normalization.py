@@ -30,6 +30,6 @@ def normalize(bib: DataCollection):
     voltage = np.linspace(
         start=-dx * len(voltage),
         stop=dx * len(voltage),
-        num=len(voltage),
+        num=len(voltage)*2,
     )
     norm.curves["voltage-bin"] = voltage
