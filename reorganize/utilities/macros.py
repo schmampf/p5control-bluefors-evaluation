@@ -92,8 +92,8 @@ def bulk_eval(bib: DataCollection):
     result["VXI"] = IVEval.Map(
         x_axis=IVEval.Axis(
             name=r"Voltage ($V$)",
-            values=v_b,
-            # values=v_norm,
+            # values=v_b,
+            values=v_norm,
         ),
         y_axis=IVEval.Axis(
             name="X",
@@ -129,8 +129,8 @@ def bulk_eval(bib: DataCollection):
     result["dVXC"] = IVEval.Map(
         x_axis=IVEval.Axis(
             name=r"Voltage (V)",
-            values=v_b,
-            # values=v_norm,
+            # values=v_b,
+            values=v_norm,
         ),
         y_axis=IVEval.Axis(
             name="X",
