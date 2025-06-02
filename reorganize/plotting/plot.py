@@ -120,7 +120,7 @@ def map(bib: DataCollection, type: list[str], styling: list[dict[StyleKeys, Any]
 
                 scmap = style.get(CMAP, "viridis")
                 if scmap in ["seeblau"]:
-                    scmap = cmap(clim=(-0.1,1.2))
+                    scmap = cmap(clim=(-0.1, 1.0))
 
                 plt.imshow(
                     map.values,
