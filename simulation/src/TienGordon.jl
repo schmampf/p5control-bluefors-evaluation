@@ -17,15 +17,17 @@ V0 = []
 n = 0
 m = 1.0
 itp = nothing
+reference = nothing
 #-----------------------
 
 const data_dir = joinpath(@__DIR__, "..", "data")
 
 function set_τ(τ::Real)
     global V0, I0, itp
-    data = jldopen(data_dir * "/iv.jld2", "r")
-    v, i = data["normalized"][τ]
+    data = jldopen(reference[1], "r")
+    v, i = data[reference[2]][τ]
     V0, I0 = v, i
+
     V0 = vcat(-reverse(V0), V0)
     I0 = vcat(-reverse(I0), I0)
 
@@ -53,9 +55,9 @@ function IV₀(V₀::Real, Vω::Real)
 
     out = 0.0
 
-    for mi in 1:m, ni in -n:n
-        bessel = (SF.besselj(Int(round(mi / ni)), mi * Vω))^2
-        V_shift = V₀ - (ni * ħ * ω) / (mi * Δ * e)
+    for ni in -n:n
+        bessel = (SF.besselj(ni, Vω))^2
+        V_shift = V₀ - (ni * ħ * ω) / (Δ * e)
         I = itp(V_shift)
         out += I * bessel
     end
