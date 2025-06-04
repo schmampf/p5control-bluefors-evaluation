@@ -882,7 +882,7 @@ class IVEvaluation(BaseEvaluation):
         trigger_indices: list[int,] = [1],
         y_bounds: tuple[int, int] | None = None,
         y_lim: tuple[float, float] | None = None,
-    ) -> tuple[dict, ...] | None:
+    ) -> tuple[dict, ...]:
         """
         Processes IV measurement data and returns mapped quantities over a linear voltage axis.
 
@@ -981,10 +981,7 @@ class IVEvaluation(BaseEvaluation):
             # Calculate differential conductance and resistance
             self.get_differentials(evaluated[i_trigger_index])
 
-            if self.eva_even_spaced:
-                return self.getMapsEvenSpaced(evaluated)
-            else:
-                return tuple(evaluated)
+            return tuple(evaluated)
 
     def getMapsAmplitude(self, already_evaluated: list[dict]):
         logger.info("(%s) getMapsAmplitude()", self._iv_eva_name)
