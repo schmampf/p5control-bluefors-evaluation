@@ -64,7 +64,7 @@ def bin_y_over_x(
     x_bins: np.ndarray,
     upsample: int = 0,
     upsample_method: str = "linear",
-):
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Bins y-values over given x-intervals (x_bins), optionally upsampling the (x, y) data beforehand.
 
