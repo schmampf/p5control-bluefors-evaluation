@@ -184,7 +184,7 @@ class BaseClass:
     def title(self, title: str):
         """set title"""
         self.base["title"] = title
-        logger.info("%s", title)
+        logger.info("(%s) %s", self._base_name, title)
 
     @property
     def sub_folder(self):
