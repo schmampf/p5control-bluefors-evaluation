@@ -108,7 +108,7 @@ function IV₀(V₀::Real, Vω::Real)
 
     out = 0.0
 
-    for mi in 1:m, ni in -n:n
+    for mi in m, ni in -n:n
         bessel = (SF.besselj(ni, mi * Vω))^2
         V_shift = V₀ - (ni * ħ * ω) / (mi * Δ * e)
         I = reference.Im[mi][2](V_shift)
