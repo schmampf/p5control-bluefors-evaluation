@@ -1,11 +1,17 @@
-import utilities.logging as Logger
-import integration.files as Files
+import pickle
+import matplotlib.pyplot as plt
 
-bib = Files.DataCollection()
+path = r"A:\Documents\Git\ProjektPraktikum\Data\dcapalbo\exp_data\Amplitude Study (19.3GHz, Antenna).pickle"
 
-Logger.setup(bib)
-Logger.set_level(Logger.INFO)
+with open(path, "rb") as f:
+    data = pickle.load(f)
 
-bib.data.name = "test"
+print()
+print(data.keys())
+set = "evaluated"
+print()
+print(data[set])
+# print()
+# print(data["evaluated"])
 
-Logger.print(Logger.WARNING, msg="This is an info message")
+# plt.imshow(data["mapped"]["y_axis"])
