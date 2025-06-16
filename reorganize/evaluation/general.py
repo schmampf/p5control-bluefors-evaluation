@@ -215,6 +215,11 @@ class Parameters:
         default_factory=lambda: [],
     )
 
+    linearizeYAxis: bool = field(default_factory=lambda: False)
+    evalTemperature: bool = field(default_factory=lambda: False)
+    normalizeXAxis: bool = field(default_factory=lambda: True)
+    smoothData: tuple[bool, int] = field(default_factory=lambda: (True, 1))
+
     def __setattr__(self, name: str, value: Any):
         if name == "volt_amp" and not np.array_equal(value, np.array([0.0, 0.0])):
             Logger.print(Logger.DEBUG, msg=f"Params.{name} = {value}")

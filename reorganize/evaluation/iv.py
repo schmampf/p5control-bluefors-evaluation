@@ -299,27 +299,28 @@ def loadCurveSets(collection: DataCollection):
     # endregion
     collection.evaluation.raw_sets["adwin"] = set
 
-    Logger.print(Logger.DEBUG, msg=f"Loading temperature data")
-    # region get temperature data
-    set = DataSet(name="bluefors")
-    if collection.iv_config.eva_temperature:
-        file, group = Files.open_file_group(
-            collection.data,
-            f"/measurement/{header.to_string()}/{params.selected_dataset}/sweep",
-        )
-        file = Files.ensure_file(file)
-        group = Files.ensure_group(group)
-        dset = Files.ensure_dataset(group.get("bluefors"))
+    if collection.params.evalTemperature:
+        Logger.print(Logger.DEBUG, msg=f"Loading temperature data")
+        # region get temperature data
+        set = DataSet(name="bluefors")
+        if collection.iv_config.eva_temperature:
+            file, group = Files.open_file_group(
+                collection.data,
+                f"/measurement/{header.to_string()}/{params.selected_dataset}/sweep",
+            )
+            file = Files.ensure_file(file)
+            group = Files.ensure_group(group)
+            dset = Files.ensure_dataset(group.get("bluefors"))
 
-        set.curves["temperature"] = np.array(dset["Tsample"], dtype="float64")
-        time = np.array(dset["time"], dtype="float64")
-        set.curves["time"] = time - time[0]  # shift start time to 0
+            set.curves["temperature"] = np.array(dset["Tsample"], dtype="float64")
+            time = np.array(dset["time"], dtype="float64")
+            set.curves["time"] = time - time[0]  # shift start time to 0
 
-        if file:
-            file.close()
+            if file:
+                file.close()
 
-        # endregion
-        collection.evaluation.raw_sets["bluefors"] = set
+            # endregion
+            collection.evaluation.raw_sets["bluefors"] = set
 
     set.check_curves()
     collection.evaluation.cached_sets = collection.evaluation.raw_sets.copy()
@@ -428,13 +429,15 @@ def process_curve_sets(
     diff_resistance = np.gradient(v_binned, c_bins)
     diff_conductance = np.gradient(c_binned, v_bins) / G_0
 
-    temps = set["bluefors"].curves["temperature"]
-    temp = np.nanmean(temps)
-
     diffs = DataSet()
     diffs.curves["diff_conductance"] = diff_conductance
     diffs.curves["diff_resistance"] = diff_resistance
-    diffs.curves["mean_temp"] = temp
+
+    if collection.params.evalTemperature:
+        temps = set["bluefors"].curves["temperature"]
+        temp = np.nanmean(temps)
+
+        diffs.curves["mean_temp"] = temp
 
     collection.evaluation.cached_sets["diffs"] = diffs
 

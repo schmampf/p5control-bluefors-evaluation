@@ -33,6 +33,9 @@ class StyleKeys(Enum):
     ASPECT = auto()
     TICKS = auto()
 
+    FLIP_VERTICAL = auto()
+    FLIP_HORIZONTAL = auto()
+
 
 X_LABEL = StyleKeys.X_LABEL
 Y_LABEL = StyleKeys.Y_LABEL
@@ -46,6 +49,8 @@ CBAR = StyleKeys.CBAR
 INTERPOL = StyleKeys.INTERPOL
 ASPECT = StyleKeys.ASPECT
 TICKS = StyleKeys.TICKS
+FLIP_VERTICAL = StyleKeys.FLIP_VERTICAL
+FLIP_HORIZONTAL = StyleKeys.FLIP_HORIZONTAL
 # endregion
 
 
@@ -118,6 +123,12 @@ def map(bib: DataCollection, type: list[str], styling: list[dict[StyleKeys, Any]
                     ycoords = ycoords_def * scale[1]
                     map.values = map_def.values * scale[2]
 
+                if style.get(FLIP_VERTICAL, True):
+                    map.values = np.flipud(map.values)
+
+                if style.get(FLIP_HORIZONTAL, True):
+                    map.values = np.fliplr(map.values)
+
                 scmap = style.get(CMAP, "viridis")
                 if scmap in ["seeblau"]:
                     scmap = cmap(clim=(-0.1, 1.0))
@@ -133,6 +144,7 @@ def map(bib: DataCollection, type: list[str], styling: list[dict[StyleKeys, Any]
                         ycoords[0],
                         ycoords[-1],
                     ),
+                    clim=(2, 2.7),
                 )
 
                 style_map(map, style)
