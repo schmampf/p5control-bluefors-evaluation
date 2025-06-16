@@ -40,7 +40,10 @@ def format_unit(unit: str):
         value = 10**prefix_value
         return (value, unit)
     else:
-        raise ValueError(f"Invalid unit prefix: {unit[0]}")
+        prefix_value = 0
+        unit = unit[1:]
+        value = 10**prefix_value
+        return (value, unit)
 
 
 def format_scientific(s):
