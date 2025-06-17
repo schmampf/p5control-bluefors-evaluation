@@ -43,12 +43,12 @@ def bulk_eval(bib: DataCollection):
     num_slices = bib.params.available_measurement_entries
     slice_index = np.linspace(0, num_slices - 1, num_slices, dtype=int)
 
-    VXI = np.empty((num_slices, bib.iv_params.bins), dtype=float)
-    IXV = np.empty((num_slices, bib.iv_params.bins), dtype=float)
-    dIXR = np.empty((num_slices, bib.iv_params.bins), dtype=float)
-    dVXC = np.empty((num_slices, bib.iv_params.bins), dtype=float)
+    VXI = np.zeros((num_slices, bib.iv_params.bins), dtype=float)
+    IXV = np.zeros((num_slices, bib.iv_params.bins), dtype=float)
+    dIXR = np.zeros((num_slices, bib.iv_params.bins), dtype=float)
+    dVXC = np.zeros((num_slices, bib.iv_params.bins), dtype=float)
 
-    TX = np.empty((num_slices, 1), dtype=float)
+    TX = np.zeros((num_slices, 1), dtype=float)
 
     v_norm = []
 
@@ -71,7 +71,9 @@ def bulk_eval(bib: DataCollection):
         iv = bib.evaluation.cached_sets["adwin"].curves["current-voltage"]
         vi = bib.evaluation.cached_sets["adwin"].curves["voltage-current"]
         d_res = bib.evaluation.cached_sets["diffs"].curves["diff_resistance"]
-        d_cond = bib.evaluation.cached_sets["diffs"].curves["diff_conductance"]
+        d_cond = sanitize(
+            bib.evaluation.cached_sets["diffs"].curves["diff_conductance"]
+        )
 
         if bib.params.evalTemperature:
             eval(bib, "bluefors")
@@ -121,7 +123,7 @@ def bulk_eval(bib: DataCollection):
         interpolator = interp1d(y_labels, dIXR, axis=0, kind="linear")
         dIXR = interpolator(ybins)
 
-    if bib.params.smoothData[0]:
+    if bib.params.smoothData:
         Logger.print(
             Logger.INFO,
             msg="Smoothing data with moving average",
@@ -129,16 +131,20 @@ def bulk_eval(bib: DataCollection):
 
         def smoothMatrix(matrix):
             """Smooth a matrix with a moving average."""
-            smoothed = np.empty_like(matrix)
+            smoothed = np.zeros(
+                (matrix.shape[0], matrix.shape[1] - 9),
+                dtype=float,
+            )
             for i in range(matrix.shape[0]):  # for each curve
-                for j in range(1, bib.params.smoothData[1]):  # how many times to smooth
-                    smoothed[i, :] = Math.moving_average(matrix[i, :], 10)
+                smoothed[i, :] = Math.moving_average(matrix[i, :], 10)
             return smoothed
 
         VXI = smoothMatrix(VXI)
         IXV = smoothMatrix(IXV)
         dIXR = smoothMatrix(dIXR)
         dVXC = smoothMatrix(dVXC)
+
+    dVXC = np.nan_to_num(dVXC, nan=0.0)
 
     norm = bib.params.normalizeXAxis
     v_norm = bib.evaluation.persistent_sets["norm"].curves["voltage-bin"]
@@ -200,3 +206,11 @@ def bulk_eval(bib: DataCollection):
         values=TX,
     )
     bib.result.maps = result
+
+
+def sanitize(x):
+    for i, v in enumerate(x):
+        if v == np.nan or v == np.inf:
+            x[i] = 0.0
+
+    return x

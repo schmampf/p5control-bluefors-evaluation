@@ -26,12 +26,15 @@ class StyleKeys(Enum):
     Y_LIM = auto()
     Z_LIM = auto()
 
+    X_TICKS = auto()
+    Y_TICKS = auto()
+    Z_TICKS = auto()
+
     CMAP = auto()
     CBAR = auto()
     INTERPOL = auto()
 
     ASPECT = auto()
-    TICKS = auto()
 
     FLIP_VERTICAL = auto()
     FLIP_HORIZONTAL = auto()
@@ -44,11 +47,13 @@ SCALE = StyleKeys.SCALE
 X_LIM = StyleKeys.X_LIM
 Y_LIM = StyleKeys.Y_LIM
 Z_LIM = StyleKeys.Z_LIM
+X_TICKS = StyleKeys.X_TICKS
+Y_TICKS = StyleKeys.Y_TICKS
+Z_TICKS = StyleKeys.Z_TICKS
 CMAP = StyleKeys.CMAP
 CBAR = StyleKeys.CBAR
 INTERPOL = StyleKeys.INTERPOL
 ASPECT = StyleKeys.ASPECT
-TICKS = StyleKeys.TICKS
 FLIP_VERTICAL = StyleKeys.FLIP_VERTICAL
 FLIP_HORIZONTAL = StyleKeys.FLIP_HORIZONTAL
 # endregion
@@ -133,6 +138,8 @@ def map(bib: DataCollection, type: list[str], styling: list[dict[StyleKeys, Any]
                 if scmap in ["seeblau"]:
                     scmap = cmap(clim=(-0.1, 1.0))
 
+                print(map.values.shape)
+
                 plt.imshow(
                     map.values,
                     cmap=scmap,
@@ -168,8 +175,11 @@ def style_map(map, style: dict[StyleKeys, Any]):
         plt.clim(style.get(Z_LIM))
     # endregion
     # region ticks
-    ticks = style.get(TICKS)
-    if ticks:
-        plt.locator_params(axis="x", nbins=ticks[0])
-        plt.locator_params(axis="y", nbins=ticks[1])
+    x_tick = style.get(X_TICKS)
+    if x_tick:
+        plt.xticks(np.arange(x_tick[0], x_tick[1] + x_tick[2], x_tick[2]))
+
+    y_tick = style.get(Y_TICKS)
+    if y_tick:
+        plt.yticks(np.arange(y_tick[0], y_tick[1] + y_tick[2], y_tick[2]))
     # endregion
