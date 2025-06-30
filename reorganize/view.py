@@ -11,6 +11,6 @@ Files.setup(bib, "Test", "/home/dacap/Downloads")
 GenEval.setup(bib)
 IVEval.setup(bib)
 
-bib.data.file_name = "OI-25c-09 2025-04-15 unbroken antenna full 1-formated.hdf5"
+bib.data.file_name = "2023-11-04_G0_antenna.hdf5"
 
 Files.showFile(bib.data)

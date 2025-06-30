@@ -161,8 +161,8 @@ def map(bib: DataCollection, type: list[str], styling: list[dict[StyleKeys, Any]
 
 def style_map(map, style: dict[StyleKeys, Any]):
     # region labels
-    plt.xlabel(style.get(X_LABEL) or map.x_axis.name)
-    plt.ylabel(style.get(Y_LABEL) or map.y_axis.name)
+    plt.xlabel(style.get(X_LABEL) or map.x_axis.name, fontsize=14)
+    plt.ylabel(style.get(Y_LABEL) or map.y_axis.name, fontsize=14)
     if style.get(CBAR, False):
         plt.colorbar(label=style.get(Z_LABEL, map.z_axis.name))
     # endregion
@@ -182,4 +182,5 @@ def style_map(map, style: dict[StyleKeys, Any]):
     y_tick = style.get(Y_TICKS)
     if y_tick:
         plt.yticks(np.arange(y_tick[0], y_tick[1] + y_tick[2], y_tick[2]))
+    plt.tick_params(axis="both", which="major", labelsize=14)
     # endregion

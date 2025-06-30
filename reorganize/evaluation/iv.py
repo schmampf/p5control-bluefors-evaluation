@@ -106,6 +106,9 @@ class DataSet:
             )
             return None
 
+        if params.edge_num == -1:
+            return self.copy()
+
         new_set = DataSet()
         new_set.name = self.name
         new_set.voltage_offsets = self.voltage_offsets
@@ -245,10 +248,16 @@ def select_edge(
         Logger.ERROR,
         msg=f"Invalid edge direction: {dir}. Must be 'up' or 'down'.",
     )
-    assert num > 0, Logger.print(
+    assert num > 0 or num == -1, Logger.print(
         Logger.ERROR,
-        msg=f"Invalid edge number: {num}. Must be greater than 0.",
+        msg=f"Invalid edge number: {num}. Must be greater than 0 or -1.",
     )
+    if num == -1:
+        Logger.print(
+            Logger.INFO,
+            msg="Edge number -1 selected. This will not filter the data.",
+        )
+
     collection.iv_params.edge_num = num
     collection.iv_params.edge_dir = dir
 
@@ -264,6 +273,10 @@ def loadCurveSets(collection: DataCollection):
     header = params.selected_measurement
 
     Logger.print(Logger.DEBUG, msg=f"Loading IV data")
+    Logger.print(
+        Logger.INFO,
+        msg=f"Loading dataset: {params.selected_dataset} from {header.to_string()}",
+    )
     # region load raw data & small calcs
     set = DataSet(name="adwin")
 
