@@ -925,6 +925,7 @@ class IVEvaluation(BaseEvaluation):
 
         evaluated = []
         for i_trigger_index, trigger_index in enumerate(trigger_indices):
+
             # Create an empty results dictionary for this trigger
             evaluated.append(self.get_empty_dictionary())
 
@@ -981,7 +982,7 @@ class IVEvaluation(BaseEvaluation):
             # Calculate differential conductance and resistance
             self.get_differentials(evaluated[i_trigger_index])
 
-            return tuple(evaluated)
+        return tuple(evaluated)
 
     def getMapsAmplitude(self, already_evaluated: list[dict]):
         logger.info("(%s) getMapsAmplitude()", self._iv_eva_name)
