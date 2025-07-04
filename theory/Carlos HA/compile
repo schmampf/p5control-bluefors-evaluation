@@ -1,0 +1,1 @@
+gfortran -o iv.exe iv.f -llapack -lblas -L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib
