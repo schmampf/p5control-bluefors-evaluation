@@ -624,6 +624,15 @@ class IVPlot(IVEvaluation, BasePlot):
         # get_data
         i, dvdi = self.get_dvdi_i(index, plain)
 
+        # Apply optional smoothing to dI/dV map
+        if self.smoothing:
+            didv = do_smoothing(
+                data=np.array([dvdi]),
+                window_length=self.window_length,
+                polyorder=self.polyorder,
+            )
+            dvdi = dvdi[0]
+
         # get norm and limit
         if self.dvdi_norm is None:
             dvdi_norm_value, dvdi_norm_string = get_norm(dvdi)
