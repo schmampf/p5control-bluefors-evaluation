@@ -156,7 +156,8 @@ def map(bib: DataCollection, type: list[str], styling: list[dict[StyleKeys, Any]
 
                 style_map(map, style)
 
-    plt.show()
+    # plt.show()
+    return plt
 
 
 def style_map(map, style: dict[StyleKeys, Any]):
@@ -164,7 +165,9 @@ def style_map(map, style: dict[StyleKeys, Any]):
     plt.xlabel(style.get(X_LABEL) or map.x_axis.name, fontsize=14)
     plt.ylabel(style.get(Y_LABEL) or map.y_axis.name, fontsize=14)
     if style.get(CBAR, False):
-        plt.colorbar(label=style.get(Z_LABEL, map.z_axis.name))
+        cbar = plt.colorbar()
+        cbar.set_label(style.get(Z_LABEL, map.z_axis.name), fontsize=14)
+        cbar.ax.tick_params(labelsize=14)
     # endregion
     # region lims
     if style.get(X_LIM):
