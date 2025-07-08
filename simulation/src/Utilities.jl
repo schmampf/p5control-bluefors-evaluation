@@ -1,6 +1,6 @@
 module Utilities
 export local_average, deriv1, deriv2
-using Statistics: median
+using Statistics: median, mean
 
 deriv1 = Vector{<:Real}
 deriv2 = Vector{<:Real}
@@ -9,7 +9,7 @@ deriv3 = Vector{<:Real}
 function moving_avg(data::Vector{<:Real}, window_size::Int=6)
     out = copy(data)
     di = Int(round(window_size / 2))
-    for i in data
+    for i in 1:length(data)
         if i > window_size && i < length(data) - window_size
             seg = data[(i-di):(i+di)]
             out[i] = mean(seg)
