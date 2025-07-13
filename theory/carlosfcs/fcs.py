@@ -1,8 +1,25 @@
-import os, io
+import os
+import io
+import hashlib
+import pickle
 import subprocess
 import numpy as np
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+WORK_DIR = "/Users/oliver/Documents/p5control-bluefors-evaluation/theory/carlosfcs/"
+CACHE_DIR = os.path.join(WORK_DIR, "./.cache")
+os.makedirs(CACHE_DIR, exist_ok=True)
+
+
+def hash_params(*params):
+    m = hashlib.sha256()
+    for p in params:
+        if isinstance(p, np.ndarray):
+            m.update(p.tobytes())
+        else:
+            m.update(str(p).encode())
+    return m.hexdigest()
 
 
 def bin_y_over_x(
@@ -28,7 +45,7 @@ def bin_y_over_x(
 
 
 def run_fcs(
-    V_param_V=[0, -1e-6, 10],
+    voltage_V: float,
     temperature_K: float = 0.0,
     energy_gap_V: float = 2e-4,
     dynes_parameter_V: float = 0.0,
@@ -39,8 +56,8 @@ def run_fcs(
 
     Parameters
     ----------
-    V_param_V : np.ndarray
-        Array of voltages (in V) to sweep.
+    voltage_V : float
+        voltage (in V)
     temperature_K : float, optional
         Temperature in Kelvin.
     energy_gap_V : float, optional
@@ -68,7 +85,7 @@ def run_fcs(
 
     tmp_in = os.path.join(
         tmp_input_dir,
-        f"[{V_param_V[0]:.3e}, {V_param_V[1]:.3e}, {V_param_V[2]:.3e}].in",
+        f"{voltage_V:.3e}.in",
     )
 
     if dynes_parameter_V <= 0:
@@ -83,9 +100,7 @@ def run_fcs(
     lines[3] = (
         f"{dynes_parameter_V*1e3:.6f} {dynes_parameter_V*1e3:.6f} (eta1,eta2 = broadening in meV)\n"
     )
-    lines[4] = (
-        f"{V_param_V[0]*1e3:.8f} {V_param_V[1]*1e3:.8f} {V_param_V[2]*1e3:.8f} (vi,vf,vstep in mV)\n"
-    )
+    lines[4] = f"{voltage_V*1e3:.8f} {voltage_V*1e3:.8f} 1.0 (vi,vf,vstep in mV)\n"
     lines[5] = f"{nmax} {iw} {nchi} (nmax,iw,nchi)\n"
 
     with open(tmp_in, "w") as f:
@@ -120,10 +135,10 @@ def run_fcs(
 
 def get_current_fcs(
     voltage_V: np.ndarray,
-    temperature_K: float = 0.0,
     energy_gap_V: float = 2e-4,
-    dynes_parameter_V: float = 0.0,
     transmission: float = 0.5,
+    temperature_K: float = 0.0,
+    dynes_parameter_V: float = 0.0,
     n_worker: int = 16,
     chunks=4,
 ) -> np.ndarray:
@@ -149,37 +164,31 @@ def get_current_fcs(
         Currents in A (as returned by solver).
     """
 
-    nmax: int = 10
+    m_max: int = 10
 
-    number_of_tasks = int(chunks * n_worker)
-
-    stepsize_V = np.abs(np.nanmax(voltage_V) - np.nanmin(voltage_V)) / (
-        len(voltage_V) - 1
+    key = hash_params(
+        voltage_V, transmission, energy_gap_V, temperature_K, dynes_parameter_V
     )
-    final_value_V = np.nanmax(np.abs(voltage_V))
-    total_points_V = final_value_V / stepsize_V + 1
+    cached_dir = os.path.join(CACHE_DIR, key)
+    cached_dir_npz = os.path.join(CACHE_DIR, f"{key}.npz")
 
-    points_per_chunks_and_worker = int(np.ceil(total_points_V / number_of_tasks))
+    if os.path.exists(cached_dir_npz):
+        data = np.load(cached_dir_npz)
+        return data["I"]
+    else:
+        stepsize_V = np.abs(np.nanmax(voltage_V) - np.nanmin(voltage_V)) / (
+            len(voltage_V) - 1
+        )
+        final_value_V = np.nanmax(np.abs(voltage_V))
+        input_voltage_V = np.arange(0, final_value_V + stepsize_V, stepsize_V)
 
-    # chunksize = min(
-    #     [max_chunksize, np.ceil(voltage_V[voltage_V >= 0].shape[0] / n_worker)]
-    # )
-
-    # num = int(np.ceil((final_value_V / stepsize_V + 1) / chunksize))
-
-    with ThreadPoolExecutor(max_workers=n_worker) as executor:
-        futures = []
-        for number_of_task in range(number_of_tasks):
-            V_param_V = [
-                number_of_task * points_per_chunks_and_worker * stepsize_V,
-                (number_of_task + 1) * points_per_chunks_and_worker * stepsize_V,
-                stepsize_V,
-            ]
-            if V_param_V[0] < final_value_V + stepsize_V:
+        with ThreadPoolExecutor(max_workers=n_worker) as executor:
+            futures = []
+            for i, v in enumerate(input_voltage_V):
                 futures.append(
                     executor.submit(
                         run_fcs,
-                        V_param_V=V_param_V,
+                        voltage_V=v,
                         temperature_K=temperature_K,
                         energy_gap_V=energy_gap_V,
                         dynes_parameter_V=dynes_parameter_V,
@@ -187,53 +196,52 @@ def get_current_fcs(
                     )
                 )
 
-        temp_voltage = np.full((1), np.nan, dtype="float64")
-        temp_currents = np.full((1, nmax + 1), np.nan, dtype="float64")
+            temp_voltage = []
+            temp_currents = []
 
-        for future in tqdm(
-            as_completed(futures), total=len(futures), desc="IV simulations", unit="sim"
-        ):
-            result = future.result()
-            v = result[:, 0] * 1e-3  # Convert voltage to V
-            i = result[:, 1:] * 1e-9  # Convert currents to A
+            for future in tqdm(
+                as_completed(futures),
+                total=len(futures),
+                desc="IV simulations",
+                unit="sim",
+            ):
+                result = future.result()
+                v = np.array(result[0]) * 1e-3  # Convert voltage to V
+                print(v)
+                i = np.array(result[1:]) * 1e-9  # Convert currents to A
 
-            temp_voltage = np.concatenate((temp_voltage, v, -v), axis=0)
-            temp_currents = np.concatenate((temp_currents, i, -i), axis=0)
+                temp_voltage.append(v)
+                temp_voltage.append(-v)
+                temp_currents.append(i)
+                temp_currents.append(-i)
 
-        # remove NaN values from temp_voltages and temp_currents
-        valid_indices = ~np.isnan(temp_voltage)
-        temp_voltages = temp_voltage[valid_indices]
-        temp_currents = temp_currents[valid_indices, :]
+            temp_voltage = np.array(temp_voltage)
+            temp_currents = np.array(temp_currents)
+            print(temp_voltage, temp_voltage.shape, temp_currents, temp_currents.shape)
 
-        # Initialize the output array for currents
-        currents = np.full((voltage_V.shape[0], nmax + 1), np.nan)
+            # remove NaN values from temp_voltages and temp_currents
+            valid_indices = ~np.isnan(temp_voltage)
+            temp_voltages = temp_voltage[valid_indices]
+            temp_currents = temp_currents[valid_indices, :]
 
-        for i in range(temp_currents.shape[1]):
-            currents[:, i] = bin_y_over_x(
-                x=temp_voltages,
-                y=temp_currents[:, i],
-                x_bins=voltage_V,
-            )[0]
+            # Initialize the output array for currents
+            currents = np.full((voltage_V.shape[0], m_max + 1), np.nan)
 
-    return currents
+            for i in range(temp_currents.shape[1]):
+                currents[:, i] = bin_y_over_x(
+                    x=temp_voltages,
+                    y=temp_currents[:, i],
+                    x_bins=voltage_V,
+                )[0]
 
+            np.savez(
+                cached_dir,
+                I=currents,
+                V=voltage_V,
+                Delta=energy_gap_V,
+                tau=transmission,
+                T=temperature_K,
+                Gamma=dynes_parameter_V,
+            )
 
-# voltage = np.linspace(-0.1e-3, 0.11e-3, 430)
-# currents = get_current_FCS2(
-#     voltage_V=voltage,
-#     temperature_K=0.5,
-#     energy_gap_V=100e-6,
-#     dynes_parameter_V=50e-6,
-#     transmission=0.8,
-# )
-# print(currents)
-# import matplotlib.pyplot as plt
-
-# for i in range(currents.shape[1]):
-#     plt.plot(voltage * 1e6, currents[:, i] * 1e9, label=f"$m = {i}$")
-# plt.xlabel("Voltage (µV)")
-# plt.ylabel("Current (nA)")
-# plt.title("FCS IV Curve")
-# plt.legend()
-# plt.grid()
-# plt.show()
+            return currents
