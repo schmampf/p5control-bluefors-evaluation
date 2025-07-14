@@ -8,8 +8,16 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 WORK_DIR = "/Users/oliver/Documents/p5control-bluefors-evaluation/theory/carlosfcs/"
-CACHE_DIR = os.path.join(WORK_DIR, "./.cache")
+CACHE_DIR = os.path.join(WORK_DIR, ".cache")
+TMP_DIR = os.path.join(WORK_DIR, ".tmp")
+
 os.makedirs(CACHE_DIR, exist_ok=True)
+os.makedirs(TMP_DIR, exist_ok=True)
+
+FCS_EXE = os.path.join(WORK_DIR, "fcs")
+FCS_IN = os.path.join(WORK_DIR, f"fcs.in")
+
+MAX_CHARGES: int = 10
 
 
 def hash_params(*params):
@@ -73,25 +81,19 @@ def run_fcs(
         data (as returned by solver).
     """
 
-    nmax: int = 10
+    nmax: int = MAX_CHARGES  # 10
     iw: int = 2003
     nchi: int = 66
 
-    workdir = "/Users/oliver/Documents/p5control-bluefors-evaluation/theory/carlosfcs/"
-    fcs_exe = os.path.join(workdir, "fcs")
-    fcs_in = os.path.join(workdir, f"fcs.in")
-    tmp_input_dir = os.path.join(workdir, ".tmp")
-    os.makedirs(tmp_input_dir, exist_ok=True)
-
     tmp_in = os.path.join(
-        tmp_input_dir,
+        TMP_DIR,
         f"{voltage_V:.3e}.in",
     )
 
     if dynes_parameter_V <= 0:
         dynes_parameter_V = 1e-7
 
-    with open(fcs_in, "r") as f:
+    with open(FCS_IN, "r") as f:
         lines = f.readlines()
 
     lines[0] = f"{transmission:.5f} (transmission)\n"
@@ -108,11 +110,11 @@ def run_fcs(
 
     try:
         proc = subprocess.run(
-            [fcs_exe],
+            [FCS_EXE],
             stdin=open(tmp_in, "r"),
             capture_output=True,
             text=True,
-            cwd=workdir,
+            cwd=WORK_DIR,
         )
     finally:
         if os.path.isfile(tmp_in):
@@ -127,10 +129,48 @@ def run_fcs(
             "Fortran code produced no output. Check input sweep range and step."
         )
 
-    # voltage = data[:, 0] * 1e-3  # Convert voltage to V
-    # currents = data[:, 1:] * 1e-9  # Convert currents to A
-
     return data
+
+
+def run_multiple_fcs(
+    voltage_V: list,
+    energy_gap_V: float = 2e-4,
+    transmission: float = 0.5,
+    temperature_K: float = 0.0,
+    dynes_parameter_V: float = 0.0,
+    n_worker: int = 16,
+) -> (np.ndarray, np.ndarray):
+    with ThreadPoolExecutor(max_workers=n_worker) as executor:
+        futures = []
+        for v in voltage_V:
+            futures.append(
+                executor.submit(
+                    run_fcs,
+                    voltage_V=v,
+                    temperature_K=temperature_K,
+                    energy_gap_V=energy_gap_V,
+                    dynes_parameter_V=dynes_parameter_V,
+                    transmission=transmission,
+                )
+            )
+
+        new_voltages = []
+        new_currents = []
+
+        for future in tqdm(
+            as_completed(futures),
+            total=len(futures),
+            desc="IV simulations",
+            unit="sim",
+        ):
+            result = future.result()
+            v = np.array(result[0]) * 1e-3  # Convert voltage to V
+            i = np.array(result[1:]) * 1e-9  # Convert currents to A
+
+            new_voltages.append(v)
+            new_currents.append(i)
+
+    return np.array(new_voltages), np.array(new_currents)
 
 
 def get_current_fcs(
@@ -140,7 +180,6 @@ def get_current_fcs(
     temperature_K: float = 0.0,
     dynes_parameter_V: float = 0.0,
     n_worker: int = 16,
-    chunks=4,
 ) -> np.ndarray:
     """
     Get the current for a given set of physical parameters using the FCS solver.
@@ -164,84 +203,94 @@ def get_current_fcs(
         Currents in A (as returned by solver).
     """
 
-    m_max: int = 10
+    max_charges: int = MAX_CHARGES
 
-    key = hash_params(
-        voltage_V, transmission, energy_gap_V, temperature_K, dynes_parameter_V
+    # Create a cache key based on physical parameters except voltage
+    key = hash_params(transmission, energy_gap_V, temperature_K, dynes_parameter_V)
+    cached_file = os.path.join(CACHE_DIR, f"{key}.npz")
+
+    # Calculate voltage values, that are needed in principle
+    stepsize_V = np.abs(np.nanmax(voltage_V) - np.nanmin(voltage_V)) / (
+        len(voltage_V) - 1
     )
-    cached_dir = os.path.join(CACHE_DIR, key)
-    cached_dir_npz = os.path.join(CACHE_DIR, f"{key}.npz")
+    final_value_V = np.nanmax(np.abs(voltage_V))
+    input_voltage_V = np.arange(0, final_value_V + stepsize_V, stepsize_V)
 
-    if os.path.exists(cached_dir_npz):
-        data = np.load(cached_dir_npz)
-        return data["I"]
+    # Load existing cache if present
+    if os.path.exists(cached_file):
+        cache_data = np.load(cached_file)
+
+        cached_voltages = cache_data["V"]
+        cached_currents = cache_data["I"]
     else:
-        stepsize_V = np.abs(np.nanmax(voltage_V) - np.nanmin(voltage_V)) / (
-            len(voltage_V) - 1
+        cached_voltages = np.array([], dtype=float)
+        cached_currents = np.empty((0, max_charges + 1), dtype=float)
+
+    # Identify which voltages are missing in cache
+    def is_voltage_cached(v, tolerance: float = 1e-12):
+        return np.any(np.isclose(cached_voltages, v, atol=tolerance))
+
+    uncached_voltages = np.array(
+        [v for v in input_voltage_V if not is_voltage_cached(v, tolerance=1e-12)]
+    )
+
+    # stashed voltages and currents (in voltage_V and are cached)
+    stashed_voltages = np.array(
+        [v for v in cached_voltages if is_voltage_cached(v, tolerance=1e-12)]
+    )
+    stashed_currents = cached_currents[cached_voltages == stashed_voltages]
+
+    # If there are missing voltages, compute them
+    if uncached_voltages.size > 0:
+        uncached_voltages, uncached_currents = run_multiple_fcs(
+            voltage_V=list(uncached_voltages),
+            energy_gap_V=energy_gap_V,
+            transmission=transmission,
+            temperature_K=temperature_K,
+            dynes_parameter_V=dynes_parameter_V,
+            n_worker=n_worker,
         )
-        final_value_V = np.nanmax(np.abs(voltage_V))
-        input_voltage_V = np.arange(0, final_value_V + stepsize_V, stepsize_V)
+    else:
+        uncached_voltages = np.array([], dtype=float)
+        uncached_currents = np.empty((0, max_charges + 1), dtype=float)
 
-        with ThreadPoolExecutor(max_workers=n_worker) as executor:
-            futures = []
-            for i, v in enumerate(input_voltage_V):
-                futures.append(
-                    executor.submit(
-                        run_fcs,
-                        voltage_V=v,
-                        temperature_K=temperature_K,
-                        energy_gap_V=energy_gap_V,
-                        dynes_parameter_V=dynes_parameter_V,
-                        transmission=transmission,
-                    )
-                )
+    # caching voltages
+    cached_voltages = np.concatenate((cached_voltages, uncached_voltages))
+    cached_currents = np.concatenate((cached_currents, uncached_currents))
 
-            temp_voltage = []
-            temp_currents = []
+    # Sort cached data by voltage (nicht unbedingt nötig, just for OCD)
+    sort_idx = np.argsort(cached_voltages)
+    cached_voltages = cached_voltages[sort_idx]
+    cached_currents = cached_currents[sort_idx, :]
 
-            for future in tqdm(
-                as_completed(futures),
-                total=len(futures),
-                desc="IV simulations",
-                unit="sim",
-            ):
-                result = future.result()
-                v = np.array(result[0]) * 1e-3  # Convert voltage to V
-                print(v)
-                i = np.array(result[1:]) * 1e-9  # Convert currents to A
+    # Save updated cache
+    np.savez(
+        cached_file,
+        I=cached_currents,
+        V=cached_voltages,
+        Delta=energy_gap_V,
+        tau=transmission,
+        T=temperature_K,
+        Gamma=dynes_parameter_V,
+    )
 
-                temp_voltage.append(v)
-                temp_voltage.append(-v)
-                temp_currents.append(i)
-                temp_currents.append(-i)
+    # Prepare return data
+    tmp_voltages = np.concatenate(
+        (stashed_voltages, -stashed_voltages, uncached_voltages, -uncached_voltages)
+    )
+    tmp_currents = np.concatenate(
+        (stashed_currents, -stashed_currents, uncached_currents, -uncached_currents)
+    )
 
-            temp_voltage = np.array(temp_voltage)
-            temp_currents = np.array(temp_currents)
-            print(temp_voltage, temp_voltage.shape, temp_currents, temp_currents.shape)
+    binned_currents = np.full((voltage_V.shape[0], max_charges + 1), np.nan)
 
-            # remove NaN values from temp_voltages and temp_currents
-            valid_indices = ~np.isnan(temp_voltage)
-            temp_voltages = temp_voltage[valid_indices]
-            temp_currents = temp_currents[valid_indices, :]
+    # Bin new data onto voltage_V bins
+    # We want to get currents at each missing voltage value (including negative)
+    for i_col in range(max_charges + 1):
+        binned_currents[:, i_col] = bin_y_over_x(
+            x=tmp_voltages,
+            y=tmp_currents[:, i_col],
+            x_bins=voltage_V,
+        )[0]
 
-            # Initialize the output array for currents
-            currents = np.full((voltage_V.shape[0], m_max + 1), np.nan)
-
-            for i in range(temp_currents.shape[1]):
-                currents[:, i] = bin_y_over_x(
-                    x=temp_voltages,
-                    y=temp_currents[:, i],
-                    x_bins=voltage_V,
-                )[0]
-
-            np.savez(
-                cached_dir,
-                I=currents,
-                V=voltage_V,
-                Delta=energy_gap_V,
-                tau=transmission,
-                T=temperature_K,
-                Gamma=dynes_parameter_V,
-            )
-
-            return currents
+    return binned_currents
