@@ -32,6 +32,7 @@ class StyleKeys(Enum):
 
     CMAP = auto()
     CBAR = auto()
+    C_LIM = auto()
     INTERPOL = auto()
 
     ASPECT = auto()
@@ -52,6 +53,7 @@ Y_TICKS = StyleKeys.Y_TICKS
 Z_TICKS = StyleKeys.Z_TICKS
 CMAP = StyleKeys.CMAP
 CBAR = StyleKeys.CBAR
+CLIM = StyleKeys.C_LIM
 INTERPOL = StyleKeys.INTERPOL
 ASPECT = StyleKeys.ASPECT
 FLIP_VERTICAL = StyleKeys.FLIP_VERTICAL
@@ -97,7 +99,7 @@ def plot_curves(
         plt.show()
 
 
-def map(bib: DataCollection, type: list[str], styling: list[dict[StyleKeys, Any]]):
+def map(bib: DataCollection, type: list[str], styling: list[dict[StyleKeys, Any]], fig, ax):
     if len(type) != len(styling):
         Logger.print(
             Logger.ERROR,
@@ -140,7 +142,7 @@ def map(bib: DataCollection, type: list[str], styling: list[dict[StyleKeys, Any]
 
                 print(map.values.shape)
 
-                plt.imshow(
+                ax.imshow(
                     map.values,
                     cmap=scmap,
                     interpolation=style.get(INTERPOL, None),
@@ -151,39 +153,36 @@ def map(bib: DataCollection, type: list[str], styling: list[dict[StyleKeys, Any]
                         ycoords[0],
                         ycoords[-1],
                     ),
-                    clim=(2, 2.7),
+                    clim=style.get(CLIM, (2, 2.7)),
                 )
 
-                style_map(map, style)
-
-    # plt.show()
-    return plt
+                style_map(map, style, fig, ax)
 
 
-def style_map(map, style: dict[StyleKeys, Any]):
+def style_map(map, style: dict[StyleKeys, Any], fig, ax):
     # region labels
-    plt.xlabel(style.get(X_LABEL) or map.x_axis.name, fontsize=14)
-    plt.ylabel(style.get(Y_LABEL) or map.y_axis.name, fontsize=14)
+    ax.set_xlabel(style.get(X_LABEL) or map.x_axis.name, fontsize=14)
+    ax.set_ylabel(style.get(Y_LABEL) or map.y_axis.name, fontsize=14)
     if style.get(CBAR, False):
-        cbar = plt.colorbar()
+        cbar = fig.colorbar(ax.images[0], ax=ax, orientation="vertical")
         cbar.set_label(style.get(Z_LABEL, map.z_axis.name), fontsize=14)
         cbar.ax.tick_params(labelsize=14)
     # endregion
     # region lims
     if style.get(X_LIM):
-        plt.xlim(style.get(X_LIM))
+        ax.set_xlim(style.get(X_LIM))
     if style.get(Y_LIM):
-        plt.ylim(style.get(Y_LIM))
+        ax.set_ylim(style.get(Y_LIM))
     if style.get(Z_LIM):
-        plt.clim(style.get(Z_LIM))
+        ax.set_clim(style.get(Z_LIM))
     # endregion
     # region ticks
     x_tick = style.get(X_TICKS)
     if x_tick:
-        plt.xticks(np.arange(x_tick[0], x_tick[1] + x_tick[2], x_tick[2]))
+        ax.set_xticks(np.arange(x_tick[0], x_tick[1] + x_tick[2], x_tick[2]))
 
     y_tick = style.get(Y_TICKS)
     if y_tick:
-        plt.yticks(np.arange(y_tick[0], y_tick[1] + y_tick[2], y_tick[2]))
-    plt.tick_params(axis="both", which="major", labelsize=14)
+        ax.set_yticks(np.arange(y_tick[0], y_tick[1] + y_tick[2], y_tick[2]))
+    ax.tick_params(axis="both", which="major", labelsize=14)
     # endregion

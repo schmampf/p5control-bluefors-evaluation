@@ -73,7 +73,7 @@ bib = Files.DataCollection()
 Logger.setup(bib)
 Logger.set_level(Logger.INFO)
 
-Files.setup(bib, "test", "/home/dacap/Downloads")
+Files.setup(bib, "test", rf"C:\Users\capal\Downloads\PP")
 bib.data.file_name = "2023-11-04_G0_antenna.hdf5"
 
 file = GenEval.File(Files.getfile_path(bib.data), "r+")
@@ -92,9 +92,7 @@ file = GenEval.File(Files.getfile_path(bib.data), "r+")
 rename(
     "/measurement/",
     "frequency_at_15GHz",
-    NameGen.name_generator(
-        variable=("vna_amplitudes", (-31.0, 0.0), "dBm"), vna_frequency=15e9
-    ),
+    NameGen.name_generator(variable=("vna_amplitudes", (-31.0, 0.0), "dBm"), vna_frequency=15e9),
     "",
     "",
 )

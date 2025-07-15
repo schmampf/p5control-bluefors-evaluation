@@ -71,9 +71,7 @@ def bulk_eval(bib: DataCollection):
         iv = bib.evaluation.cached_sets["adwin"].curves["current-voltage"]
         vi = bib.evaluation.cached_sets["adwin"].curves["voltage-current"]
         d_res = bib.evaluation.cached_sets["diffs"].curves["diff_resistance"]
-        d_cond = sanitize(
-            bib.evaluation.cached_sets["diffs"].curves["diff_conductance"]
-        )
+        d_cond = sanitize(bib.evaluation.cached_sets["diffs"].curves["diff_conductance"])
 
         if bib.params.evalTemperature:
             eval(bib, "bluefors")
@@ -96,10 +94,7 @@ def bulk_eval(bib: DataCollection):
         msg="\nFinished evaluating all sets",
     )
 
-    y_labels = [
-        GenEval.MeasurementHeader.parse_number(l)[0]
-        for l in bib.params.available_measurement_entries_labels
-    ]
+    y_labels = [GenEval.MeasurementHeader.parse_number(l)[0] for l in bib.params.available_measurement_entries_labels]
 
     if bib.params.linearizeYAxis:
         Logger.print(

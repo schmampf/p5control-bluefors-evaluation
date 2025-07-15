@@ -28,7 +28,7 @@ def normalize(bib: DataCollection):
 
     dIdV = dIdV[len(dIdV) // 2 :]
     voltage = voltage[len(voltage) // 2 :]
-    idxDelta = 235  # np.argmax(dIdV)
+    idxDelta = 232 if not bib.params.smoothData else 227  # np.argmax(dIdV)
     dx = 2 / idxDelta
     voltage = np.linspace(
         start=-dx * len(voltage),
