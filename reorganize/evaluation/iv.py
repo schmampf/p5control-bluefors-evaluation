@@ -469,10 +469,17 @@ def get_noise(
     c1 = dataset.curves[curve[0]]
     c2 = dataset.curves[curve[1]]
 
+    if len(c1) < 2 or len(c2) < 2:
+        Logger.print(
+            Logger.ERROR, msg="Input arrays for FFT must have at least 2 elements."
+        )
+        return
+
     n = len(c1)
     dx = float(np.median(np.diff(c1)))
-    freqs = np.fft.fftfreq(n, dx)[: n // 2]
-    spectrum = np.abs(np.fft.fft(c2)[: n // 2])
+    freqs = np.fft.fftfreq(n, dx)
+    spectrum = np.abs(np.fft.fft(c2))
+    spectrum[spectrum == 0] = np.finfo(float).eps  # avoid log10(0)
     spec_log = np.log10(spectrum)
 
     if not "noise" in source.keys():
