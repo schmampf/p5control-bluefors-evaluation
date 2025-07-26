@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib as mpl
 
-from sympy import I
 from tqdm import tqdm
 from contextlib import contextmanager
 from matplotlib.axes import Axes
