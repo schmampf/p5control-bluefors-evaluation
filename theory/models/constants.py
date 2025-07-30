@@ -29,3 +29,8 @@ tau_tol: int = 4
 T_tol_K: int = 4  # K
 Delta_tol_meV: int = 6  # meV
 Gamma_tol_meV: int = 6  # meV
+
+# FCS settings
+m_max: int = 10
+iw: int = 2003
+nchi: int = 66
