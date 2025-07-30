@@ -44,4 +44,4 @@ utilities/__pycache__/
 *.pickle
 
 # specific files
-theory/MCBJ Render/MCBJ_seeblau_ultra.png
+*MCBJ_seeblau_ultra.png
