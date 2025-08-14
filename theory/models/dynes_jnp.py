@@ -114,8 +114,32 @@ def current(
     )
     integrand = (N1 * N2) * (f1 - f2)
     integrand = jnp.nan_to_num(integrand, nan=0.0, posinf=100.0, neginf=0.0)
-    I_A = jnp.trapezoid(integrand, E_meV, axis=0)
-    return I_A
+    I_meV = jnp.trapezoid(integrand, E_meV, axis=0)
+    return I_meV
+
+
+# for fitting symmetrical junctions
+@jit
+def currents(
+    V_meV: Array,
+    E_meV: Array,
+    T_K: float,
+    Delta_meV: float,
+    Gamma_meV: float,
+) -> Array:
+    current_vectorized = vmap(
+        lambda V_mV: current(
+            V_meV=V_mV,
+            E_meV=E_meV,
+            Delta_1_meV=Delta_meV,
+            Delta_2_meV=Delta_meV,
+            T_K=T_K,
+            Gamma_1_meV=Gamma_meV,
+            Gamma_2_meV=Gamma_meV,
+        ),
+        in_axes=0,
+    )
+    return current_vectorized(V_meV)
 
 
 @jit
@@ -147,14 +171,14 @@ def current_over_voltage(
         ),
         in_axes=0,
     )
-    I_nA = lax.cond(
+    I_meV = lax.cond(
         jnp.all(Delta_meV == 0.0),
         lambda _: V_meV,
         lambda _: current_vectorized(V_meV),
         operand=None,
     )
 
-    I_nA = I_nA * G_0_muS_jax
+    I_nA = I_meV * G_0_muS_jax
 
     # extend to full symmetric I-V curve
     I_nA = jnp.concatenate((I_nA, -jnp.flip(I_nA[1:])))

@@ -882,6 +882,7 @@ class IVEvaluation(BaseEvaluation):
         trigger_indices: list[int,] = [1],
         y_bounds: tuple[int, int] | None = None,
         y_lim: tuple[float, float] | None = None,
+        skip: tuple[int | None, int | None] | None = None,
     ) -> tuple[dict, ...]:
         """
         Processes IV measurement data and returns mapped quantities over a linear voltage axis.
@@ -950,6 +951,12 @@ class IVEvaluation(BaseEvaluation):
                     self.voltage_offset_1[index],
                     self.voltage_offset_2[index],
                 ) = self.get_current_voltage(key)
+
+                if skip is not None:
+                    v_raw = v_raw[skip[0] : skip[1]]
+                    i_raw = i_raw[skip[0] : skip[1]]
+                    time = time[skip[0] : skip[1]]
+                    trigger = trigger[skip[0] : skip[1]]
 
                 # Bin current and voltage data
                 self.get_iv_binning_done(

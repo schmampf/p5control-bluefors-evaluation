@@ -6,9 +6,9 @@ from scipy.interpolate import RegularGridInterpolator
 
 import sys
 
-sys.path.append("/Users/oliver/Documents/p5control-bluefors-evaluation")
+# sys.path.append("/Users/oliver/Documents/p5control-bluefors-evaluation")
 
-from theory.models.constants import h_e_pVs
+from .constants import h_e_pVs
 
 
 def get_I_nA(
@@ -32,7 +32,7 @@ def get_I_nA(
 
     II_nA = I_nA
     II_nA = II_nA[np.newaxis, :, :]
-    II_nA = np.ones((2 * N + 1, M, V_mV.shape[0])) * II_nA
+    II_nA = II_nA * np.ones((2 * N + 1, M, V_mV.shape[0]))
 
     interp = RegularGridInterpolator(
         (n, m, V_mV),
@@ -49,7 +49,7 @@ def get_I_nA(
     II_nA = II_nm_nA[np.newaxis, :, :, :]
     I_nA = JJ_n_2 * II_nA
 
-    I_nA = np.where(np.isnan(I_nA), 0, I_nA)
+    I_nA = np.where(np.isnan(I_nA), 0.0, I_nA)
     I_nA = np.sum(I_nA, axis=1)
     I_nA = np.sum(I_nA, axis=1)
 

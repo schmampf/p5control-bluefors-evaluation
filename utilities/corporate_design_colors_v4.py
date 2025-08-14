@@ -8,7 +8,7 @@ and inverse colors for more contrast
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import ListedColormap, to_rgb
 
 # seeblau
 x = np.array([0, 30, 40, 50, 70, 85, 100]) / 100
@@ -262,6 +262,29 @@ for i in range(5):
                 max(0, database["B"][index]),
             )
         )
+
+
+def colors(index: int, fake_alpha: float = 0.0):
+    """
+    Lighten a given color by blending it with white.
+
+    Parameters:
+    - color: Matplotlib color string, hex, or RGB tuple
+    - amount: 0 (no change) to 1 (fully white)
+
+    Returns:
+    - Lightened RGB tuple
+    """
+    try:
+        c = to_rgb(COLORS[index])
+    except IndexError:
+        raise IndexError(f"index must be smaller than {len(COLORS)}.")
+
+    if fake_alpha == 0.0:
+        return np.array(c)
+    else:
+        white = np.array([1.0, 1.0, 1.0])
+        return tuple((1 - fake_alpha) * np.array(c) + fake_alpha * white)
 
 
 def cmap(

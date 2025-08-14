@@ -8,27 +8,27 @@ from numpy.typing import NDArray
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import as_completed
 
+
+from .functions import cache_hash
+from .functions import bin_y_over_x
+
+from .constants import V_tol_mV
+from .constants import tau_tol
+from .constants import T_tol_K
+from .constants import Delta_tol_meV
+from .constants import Gamma_tol_meV
+
+# number of maximum charges
+from .constants import m_max
+from .constants import iw
+from .constants import nchi
+
 HOME_DIR = "/Users/oliver/Documents/p5control-bluefors-evaluation"
 sys.path.append(HOME_DIR)
-
-from theory.models.functions import cache_hash
-from theory.models.functions import bin_y_over_x
-
-from theory.models.constants import V_tol_mV
-from theory.models.constants import tau_tol
-from theory.models.constants import T_tol_K
-from theory.models.constants import Delta_tol_meV
-from theory.models.constants import Gamma_tol_meV
-
 WORK_DIR = os.path.join(HOME_DIR, "theory/models/carlosfcs/")
 CACHE_DIR = os.path.join(WORK_DIR, ".cache")
 FCS_EXE = os.path.join(WORK_DIR, "fcs")
 os.makedirs(CACHE_DIR, exist_ok=True)
-
-# number of maximum charges
-from theory.models.constants import m_max
-from theory.models.constants import iw
-from theory.models.constants import nchi
 
 
 def run_fcs(
