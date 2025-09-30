@@ -136,12 +136,8 @@ def fit_current(
     perr_full[free_mask] = perr
 
     I_exp_nA: NDArray64 = I_nA
-    I_ini_nA: NDArray64 = np.array(
-        function(V_mV, *guess_full[parameter_mask]), dtype=np.float64
-    )
-    I_fit_nA: NDArray64 = np.array(
-        function(V_mV, *popt_full[parameter_mask]), dtype=np.float64
-    )
+    I_ini_nA: NDArray64 = np.array(fixed_function(V_mV, *guess), dtype=np.float64)
+    I_fit_nA: NDArray64 = np.array(fixed_function(V_mV, *popt), dtype=np.float64)
 
     solution: DictType = {
         "optimizer": optimizer,

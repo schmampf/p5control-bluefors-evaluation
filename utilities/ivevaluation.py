@@ -583,8 +583,8 @@ class IVEvaluation(BaseEvaluation):
 
         # Store raw IV data tuples
         dictionary["iv_tuples_raw"][index] = [
-            i_raw_filtered,
             v_raw_filtered,
+            i_raw_filtered,
             time_filtered,
         ]
 
@@ -607,8 +607,8 @@ class IVEvaluation(BaseEvaluation):
 
         # Store raw IV data tuples
         dictionary["iv_tuples"][index] = [
-            i_raw_downsampled,
             v_raw_downsampled,
+            i_raw_downsampled,
             t_raw_downsampled,
             downsample_counts,
         ]

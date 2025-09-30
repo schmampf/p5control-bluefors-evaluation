@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 from numpy.typing import NDArray
 
@@ -20,6 +21,31 @@ def bin_y_over_x(
     count = np.where(count == 0, np.nan, count)
     summe, _ = np.histogram(x, bins=x_nu, weights=y)
     return summe / count
+
+
+def oversample(
+    x: NDArray[np.float64],
+    y: NDArray[np.float64],
+    upsample: int = 100,
+    upsample_method: str = "linear",
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    if upsample <= 1:
+        return x, y  # nothing to do
+
+    # stack as channels: shape (batch=1, channels=2, length=N)
+    k = np.stack([x, y])[None, ...]  # shape (1, 2, N)
+    k_torch = torch.tensor(k, dtype=torch.float32)
+
+    # interpolate along last dimension
+    m = torch.nn.Upsample(
+        scale_factor=upsample, mode=upsample_method, align_corners=True
+    )
+    big = m(k_torch)  # shape (1, 2, N*upsample)
+
+    x_new = big[0, 0, :].numpy().astype(np.float64)
+    y_new = big[0, 1, :].numpy().astype(np.float64)
+
+    return x_new, y_new
 
 
 # cache hashes

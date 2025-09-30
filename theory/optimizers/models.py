@@ -1,12 +1,15 @@
 from typing import Callable, Optional, TypeAlias
 
+import jax
 import jax.numpy as jnp
 import numpy as np
-from jax import Array, jit
+from jax import Array, jit, config
 from numpy.typing import NDArray, ArrayLike
 
 from theory.models.PAT import get_I_pat_nA_from_I0_A0
 from theory.models.dynes_jnp import G_0_muS_jax, currents, thermal_energy_gap
+
+jax.config.update("jax_enable_x64", True)
 
 NDArray64: TypeAlias = NDArray[np.float64]
 ModelFunction: TypeAlias = Callable[..., ArrayLike]

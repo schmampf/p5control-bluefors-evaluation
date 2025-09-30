@@ -9,7 +9,15 @@ NDArray64 = NDArray[np.float64]
 DictType = dict[str, float | NDArray[np.float64 | np.bool] | None]
 
 
-def show_fitting(solution: DictType, num: int = 0):
+def show_fitting(solution: dict, num: int = 0):
+
+    color_pos = colors(3)
+    color_neg = colors(3, 0.3)
+    color_fit = colors(5)
+    color_fit_neg = colors(5)
+    color_ini = colors(4, 0.5)
+    color_ini_neg = colors(4, 0.5)
+    color_w = "grey"
 
     V_mV: NDArray64 = np.array(solution["V_mV"], dtype=np.float64)
     V_nan_0_mV = np.where(V_mV == 0.0, np.nan, V_mV)
@@ -116,8 +124,8 @@ def show_fitting(solution: DictType, num: int = 0):
     axs_s = []
     for ax in [ax_ug, ax_uG]:
         ax_s = ax.twinx()
-        ax_s.tick_params(axis="y", labelcolor="grey", direction="in", color="grey")
-        ax_s.set_ylabel("$\\sigma$ (arb. u.)", color="grey")
+        ax_s.tick_params(axis="y", labelcolor=color_w, direction="in", color=color_w)
+        ax_s.set_ylabel("$\\sigma$ (arb. u.)", color=color_w)
         ax_s.set_ylim((-0.1, 1.1))
         axs_s.append(ax_s)
 
@@ -149,7 +157,7 @@ def show_fitting(solution: DictType, num: int = 0):
         I_exp_pos,
         ".",
         label="$I_\\mathrm{exp}^\\rightarrow$",
-        color=colors(3),
+        color=color_pos,
         ms=2,
         zorder=13,
     )
@@ -158,72 +166,132 @@ def show_fitting(solution: DictType, num: int = 0):
         I_exp_neg,
         ".",
         label="$I_\\mathrm{exp}^\\leftarrow$",
-        color=colors(3, 0.3),
+        color=color_neg,
         ms=2,
         zorder=13,
     )
-    ax_I.plot(V_mV_pos, I_fit_pos, label="$\\mathrm{fit}$", color=colors(0), zorder=12)
-    ax_I.plot(V_mV_neg, I_fit_neg, color=colors(0), zorder=12)
-    ax_I.plot(V_mV_pos, I_ini_pos, label="$\\mathrm{ini}$", color=colors(4), zorder=11)
-    ax_I.plot(V_mV_neg, I_ini_neg, color=colors(4), zorder=11)
+    ax_I.plot(V_mV_pos, I_fit_pos, label="$\\mathrm{fit}$", color=color_fit, zorder=12)
+    ax_I.plot(V_mV_neg, I_fit_neg, color=color_fit, zorder=12)
+    ax_I.plot(V_mV_pos, I_ini_pos, label="$\\mathrm{ini}$", color=color_ini, zorder=11)
+    ax_I.plot(V_mV_neg, I_ini_neg, color=color_ini, zorder=11)
     ax_I.legend()
 
-    ax_g.plot(V_mV_pos, g_exp_pos, ".", color=colors(3), ms=2, zorder=13)
-    ax_g.plot(V_mV_neg, g_exp_neg, ".", color=colors(3, 0.3), ms=2, zorder=13)
-    ax_g.plot(V_mV_pos, g_fit_pos, color=colors(0), zorder=12)
-    ax_g.plot(V_mV_neg, g_fit_neg, color=colors(0), zorder=12)
-    ax_g.plot(V_mV_pos, g_ini_pos, color=colors(4), zorder=11)
-    ax_g.plot(V_mV_neg, g_ini_neg, color=colors(4), zorder=11)
+    ax_g.plot(V_mV_pos, g_exp_pos, ".", color=color_pos, ms=2, zorder=13)
+    ax_g.plot(V_mV_neg, g_exp_neg, ".", color=color_neg, ms=2, zorder=13)
+    ax_g.plot(V_mV_pos, g_fit_pos, color=color_fit, zorder=12)
+    ax_g.plot(V_mV_neg, g_fit_neg, color=color_fit, zorder=12)
+    ax_g.plot(V_mV_pos, g_ini_pos, color=color_ini, zorder=11)
+    ax_g.plot(V_mV_neg, g_ini_neg, color=color_ini, zorder=11)
 
-    ax_G.plot(V_mV_pos, G_exp_pos, ".", color=colors(3), ms=2, zorder=13)
-    ax_G.plot(V_mV_neg, G_exp_neg, ".", color=colors(3, 0.3), ms=2, zorder=13)
-    ax_G.plot(V_mV_pos, G_fit_pos, color=colors(0), zorder=12)
-    ax_G.plot(V_mV_neg, G_fit_neg, color=colors(0), zorder=12)
-    ax_G.plot(V_mV_pos, G_ini_pos, color=colors(4), zorder=11)
-    ax_G.plot(V_mV_neg, G_ini_neg, color=colors(4), zorder=11)
+    ax_G.plot(V_mV_pos, G_exp_pos, ".", color=color_pos, ms=2, zorder=13)
+    ax_G.plot(V_mV_neg, G_exp_neg, ".", color=color_neg, ms=2, zorder=13)
+    ax_G.plot(V_mV_pos, G_fit_pos, color=color_fit, zorder=12)
+    ax_G.plot(V_mV_neg, G_fit_neg, color=color_fit, zorder=12)
+    ax_G.plot(V_mV_pos, G_ini_pos, color=color_ini, zorder=11)
+    ax_G.plot(V_mV_neg, G_ini_neg, color=color_ini, zorder=11)
 
     ax_ug.plot(
-        V_mV_pos, np.full_like(V_mV_pos, 0.0), ".", color=colors(3), ms=2, zorder=13
+        V_mV_pos, np.full_like(V_mV_pos, 0.0), ".", color=color_pos, ms=2, zorder=13
     )
-    ax_ug.plot(V_mV_pos, ug_fit_pos, color=colors(0), zorder=12)
-    ax_ug.plot(V_mV_neg, ug_fit_neg, color=colors(0, 0.3), zorder=12)
-    ax_ug.plot(V_mV_pos, ug_ini_pos, color=colors(4), zorder=11)
-    ax_ug.plot(V_mV_neg, ug_ini_neg, color=colors(4, 0.3), zorder=11)
+    ax_ug.plot(V_mV_pos, ug_fit_pos, color=color_fit, zorder=12)
+    ax_ug.plot(V_mV_neg, -ug_fit_neg, color=color_fit_neg, zorder=12)
+    ax_ug.plot(V_mV_pos, ug_ini_pos, color=color_ini, zorder=11)
+    ax_ug.plot(V_mV_neg, -ug_ini_neg, color=color_ini_neg, zorder=11)
 
     ax_uG.plot(
-        V_mV_pos, np.full_like(V_mV_pos, 0.0), ".", color=colors(3), ms=2, zorder=13
+        V_mV_pos, np.full_like(V_mV_pos, 0.0), ".", color=color_pos, ms=2, zorder=13
     )
-    ax_uG.plot(V_mV_pos, uG_fit_pos, color=colors(0), zorder=12)
-    ax_uG.plot(V_mV_neg, uG_fit_neg, color=colors(0, 0.3), zorder=12)
-    ax_uG.plot(V_mV_pos, uG_ini_pos, color=colors(4), zorder=11)
-    ax_uG.plot(V_mV_neg, uG_ini_neg, color=colors(4, 0.3), zorder=11)
+    ax_uG.plot(V_mV_pos, uG_fit_pos, color=color_fit, zorder=12)
+    ax_uG.plot(V_mV_neg, -uG_fit_neg, color=color_fit_neg, zorder=12)
+    ax_uG.plot(V_mV_pos, uG_ini_pos, color=color_ini, zorder=11)
+    ax_uG.plot(V_mV_neg, -uG_ini_neg, color=color_ini_neg, zorder=11)
 
-    axs_s[0].plot(V_mV_pos, np.full_like(V_mV_pos, 1.0), color="grey")
-    axs_s[1].plot(V_mV_pos, np.full_like(V_mV_pos, 0.0), color="grey")
+    axs_s[0].plot(V_mV_pos, np.full_like(V_mV_pos, 1.0), color=color_w)
+    axs_s[1].plot(V_mV_pos, np.full_like(V_mV_pos, 0.0), color=color_w)
 
     # add text box for the statistics
     stats = ""
     stats += f"$G={popt[0]:.4f}$"
     stats += f"$\\,({int(np.round(perr[0]*1e4))})$" if perr[0] != 0 else ""
-    stats += "$\\,G_0$\n"
-    stats += f"$T={popt[1]*1e3:.1f}$"
+    stats += "$\\,G_0$"
+    stats += f"\n$T={popt[1]*1e3:.1f}$"
     stats += f"$\\,({int(np.round(perr[1]*1e4))})$" if perr[1] != 0 else ""
-    stats += "$\\,$mK\n"
-    stats += f"$\\Delta={popt[2]*1e3:.1f}$"
+    stats += "$\\,$mK"
+    stats += f"\n$\\Delta={popt[2]*1e3:.1f}$"
     stats += f"$\\,({int(np.round(perr[2]*1e4))})$" if perr[2] != 0 else ""
-    stats += "$\\,$µeV\n"
-    stats += f"$\\Gamma={popt[3]*1e3:.2f}$"
+    stats += "$\\,$µeV"
+    stats += f"\n$\\Gamma={popt[3]*1e3:.2f}$"
     stats += f"$\\,({int(np.round(perr[3]*1e5))})$" if perr[3] != 0 else ""
     stats += "$\\,$µeV"
+
+    if "pat" in solution["model"]:
+        stats += f"\n$A={popt[4]*1e3:.2f}$"
+        stats += f"$\\,({int(np.round(perr[4]*1e5))})$" if perr[4] != 0 else ""
+        stats += "$\\,$µeV"
+        stats += f"\n$\\nu={popt[5]:.2f}$"
+        stats += f"$\\,({int(np.round(perr[5]*1e2))})$" if perr[5] != 0 else ""
+        stats += "$\\,$GHz"
     bbox = dict(boxstyle="round", fc="lightgrey", ec="grey", alpha=0.5)
     ax_I.text(
         0.05,
-        0.6,
+        0.55,
         stats,
-        fontsize=9,
+        fontsize=7,
         bbox=bbox,
         transform=ax_I.transAxes,
         horizontalalignment="left",
     )
-
+    fig.suptitle(f"{solution['optimizer']}, {solution['model']}")
     fig.tight_layout()
+
+
+def show_stats(solution: dict):
+    print(f"# Model: '{solution['model']}'")
+    print(f"# Optimizer: '{solution['optimizer']}'")
+
+    print(f"\n# --- paramters ---")
+    print(
+        f"# τ = {solution['popt'][0]}{f' ({solution['perr'][0]})' if not solution['fixed'][0] else ''}"
+    )
+    print(
+        f"# T = {solution['popt'][1]*1e3}{f' ({solution['perr'][1]*1e3})' if not solution['fixed'][1] else ''} mK"
+    )
+    print(
+        f"# Δ = {solution['popt'][2]*1e3}{f' ({solution['perr'][2]*1e3})' if not solution['fixed'][2] else ''} µeV"
+    )
+    print(
+        f"# Γ = {solution['popt'][3]*1e3}{f' ({solution['perr'][3]*1e3})' if not solution['fixed'][3] else ''} µeV"
+    )
+
+    if "pat" in solution["model"]:
+        print(
+            f"# A = {solution['popt'][4]*1e3}{f' ({solution['perr'][4]*1e3})' if not solution['fixed'][4] else ''} µV"
+        )
+        print(
+            f"# ν = {solution['popt'][5]}{f' ({solution['perr'][5]})' if not solution['fixed'][5] else ''} GHz"
+        )
+
+    print(f"\n# --- input ---")
+    print(f"# solution = fit_current(\n#     V_mV=V_mV,\n#     I_nA=I_nA,")
+    print(
+        f"#     tau=({solution['guess'][0]}, ({solution['lower'][0]}, {solution['upper'][0]}), {solution['fixed'][0]}),"
+    )
+    print(
+        f"#     T_K=({solution['guess'][1]}, ({solution['lower'][1]}, {solution['upper'][1]}), {solution['fixed'][1]}),"
+    )
+    print(
+        f"#     Delta_mV=({solution['guess'][2]}, ({solution['lower'][2]}, {solution['upper'][2]}), {solution['fixed'][2]}),"
+    )
+    print(
+        f"#     Gamma_mV=({solution['guess'][3]}, ({solution['lower'][3]}, {solution['upper'][3]}), {solution['fixed'][3]}),"
+    )
+    print(
+        f"#     A_mV=({solution['guess'][4]}, ({solution['lower'][4]}, {solution['upper'][4]}), {solution['fixed'][4]}),"
+    )
+    print(
+        f"#     nu_GHz=({solution['guess'][5]}, ({solution['lower'][5]}, {solution['upper'][5]}), {solution['fixed'][5]}),"
+    )
+
+    print(f'#     model="{solution['model']}",')
+    print(f'#     optimizer="{solution['optimizer']}",')
+    print("# )")

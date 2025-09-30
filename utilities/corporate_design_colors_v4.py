@@ -7,8 +7,8 @@ and inverse colors for more contrast
 """
 
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import numpy as np
-from matplotlib.colors import ListedColormap, to_rgb
 
 # seeblau
 x = np.array([0, 30, 40, 50, 70, 85, 100]) / 100
@@ -276,7 +276,7 @@ def colors(index: int, fake_alpha: float = 0.0):
     - Lightened RGB tuple
     """
     try:
-        c = to_rgb(COLORS[index])
+        c = mcolors.to_rgb(COLORS[index])
     except IndexError:
         raise IndexError(f"index must be smaller than {len(COLORS)}.")
 
@@ -285,7 +285,6 @@ def colors(index: int, fake_alpha: float = 0.0):
     else:
         white = np.array([1.0, 1.0, 1.0])
         return tuple((1 - fake_alpha) * np.array(c) + fake_alpha * white)
-
 
 def cmap(
     color="seeblau",
@@ -311,7 +310,7 @@ def cmap(
     if inverse:
         mapped = np.flip(mapped, axis=0)
         over, under = under, over
-    colormap = ListedColormap(mapped)
+    colormap = mcolors.ListedColormap(mapped)
     colormap.set_over(color=over)
     colormap.set_under(color=under)
     colormap.set_bad(color=bad)
@@ -409,7 +408,7 @@ def plot_cmap(
 
     ax.set_xlim(clim)
     X, _ = np.meshgrid(x, np.ones((47,)))
-    im = ax_.imshow(X, cmap=ListedColormap(mapped))
+    im = ax_.imshow(X, cmap=mcolors.ListedColormap(mapped))
     ax_.remove()
     fig.colorbar(
         im,
