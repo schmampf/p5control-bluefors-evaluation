@@ -16,8 +16,8 @@ ModelType: TypeAlias = tuple[ModelFunction, NDArray[np.bool]]
 def optimizers(
     optimizer: str,
     function: ModelFunction,
-    V_mV: NDArray64,
-    I_nA: NDArray64,
+    x_data: NDArray64,
+    y_data: NDArray64,
     sigma: Optional[NDArray64],
     guess: NDArray64,
     lower: NDArray64,
@@ -32,13 +32,19 @@ def optimizers(
         ``100*(N+1)`` is the maximum where N is the number of elements
         in `x0`.
     """
+
+    if sigma is None:
+        sigma = np.ones_like(x_data, dtype="float64")
+        # now problems with curve_fit overload
+        # ist das wirklich sinnvoll? sigma ist ja eine ungenauigkeit.. ???
+
     match optimizer:
 
         case "curve_fit":
             results: tuple[NDArray64, NDArray64] = curve_fit(
                 f=function,
-                xdata=V_mV,
-                ydata=I_nA,
+                xdata=x_data,
+                ydata=y_data,
                 sigma=sigma,
                 absolute_sigma=True,
                 p0=guess,
