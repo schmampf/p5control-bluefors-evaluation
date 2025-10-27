@@ -4,7 +4,7 @@ Module Doc String
 
 import importlib
 import sys
-from typing import Optional, Callable, TypeAlias
+from typing import Optional, Callable, TypeAlias, TypedDict
 
 import numpy as np
 from numpy.typing import NDArray, ArrayLike
@@ -22,6 +22,31 @@ ModelFunction: TypeAlias = Callable[..., ArrayLike]
 ModelType: TypeAlias = tuple[ModelFunction, NDArray[np.bool]]
 
 
+class SolutionDict(TypedDict):
+    optimizer: str
+    model: str
+    V_mV: NDArray64
+    I_exp_nA: NDArray64
+    I_ini_nA: NDArray64
+    I_fit_nA: NDArray64
+    guess: NDArray64
+    lower: NDArray64
+    upper: NDArray64
+    fixed: NDArray[np.bool]
+    popt: NDArray64
+    pcov: NDArray64
+    perr: NDArray64
+    E_mV: Optional[NDArray64]
+    sigma: Optional[NDArray64]
+    maxfev: Optional[int]
+    tau: float
+    T_K: float
+    Delta_mV: float
+    Gamma_mV: float
+    A_mV: float
+    nu_GHz: float
+
+
 def fit_current(
     V_mV: NDArray64,
     I_nA: NDArray64,
@@ -36,7 +61,7 @@ def fit_current(
     model: str = "dynes",
     optimizer: str = "curve_fit_jax",
     maxfev: Optional[int] = None,
-) -> DictType:
+) -> SolutionDict:
     """
     Doc String
     """
@@ -117,8 +142,8 @@ def fit_current(
     popt, pcov, perr = optimizers(
         optimizer=optimizer,
         function=fixed_function,
-        V_mV=V_mV,
-        I_nA=I_nA,
+        x_data=V_mV,
+        y_data=I_nA,
         sigma=sigma,
         guess=guess,
         lower=lower,
@@ -136,10 +161,14 @@ def fit_current(
     perr_full[free_mask] = perr
 
     I_exp_nA: NDArray64 = I_nA
-    I_ini_nA: NDArray64 = np.array(fixed_function(V_mV, *guess), dtype=np.float64)
-    I_fit_nA: NDArray64 = np.array(fixed_function(V_mV, *popt), dtype=np.float64)
+    I_ini_nA: NDArray64 = np.array(
+        function(V_mV, *guess_full[parameter_mask]), dtype=np.float64
+    )
+    I_fit_nA: NDArray64 = np.array(
+        function(V_mV, *popt_full[parameter_mask]), dtype=np.float64
+    )
 
-    solution: DictType = {
+    solution: SolutionDict = {
         "optimizer": optimizer,
         "model": model,
         "V_mV": V_mV,
