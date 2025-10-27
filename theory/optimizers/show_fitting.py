@@ -1,15 +1,13 @@
 import numpy as np
-from numpy.typing import NDArray
 import matplotlib.pyplot as plt
 
 from theory.models.constants import G_0_muS, e, h
 from utilities.corporate_design_colors_v4 import colors, cmap
 
-NDArray64 = NDArray[np.float64]
-DictType = dict[str, float | NDArray[np.float64 | np.bool] | None]
+from theory.optimizers.fit_current import NDArray64, SolutionDict
 
 
-def show_fitting(solution: dict, num: int = 0):
+def show_fitting(solution: SolutionDict, num: int = 0):
 
     color_pos = colors(3)
     color_neg = colors(3, 0.3)
@@ -20,9 +18,6 @@ def show_fitting(solution: dict, num: int = 0):
     color_w = "grey"
 
     V_mV: NDArray64 = np.array(solution["V_mV"], dtype=np.float64)
-    V_nan_0_mV = np.where(V_mV == 0.0, np.nan, V_mV)
-    m_pos = V_mV > 0
-    m_neg = V_mV < 0
 
     I_exp: NDArray64 = np.array(solution["I_exp_nA"], dtype=np.float64)
     I_ini: NDArray64 = np.array(solution["I_ini_nA"], dtype=np.float64)
@@ -30,6 +25,13 @@ def show_fitting(solution: dict, num: int = 0):
 
     popt: NDArray64 = np.array(solution["popt"], dtype=np.float64)
     perr: NDArray64 = np.array(solution["perr"], dtype=np.float64)
+
+    Delta_mV: float = solution["Delta_mV"]
+    tau: float = solution["tau"]
+
+    V_nan_0_mV = np.where(V_mV == 0.0, np.nan, V_mV)
+    m_pos = V_mV > 0
+    m_neg = V_mV < 0
 
     g_exp = I_exp / V_nan_0_mV / G_0_muS
     g_ini = I_ini / V_nan_0_mV / G_0_muS
@@ -51,30 +53,27 @@ def show_fitting(solution: dict, num: int = 0):
 
     g_exp_pos = g_exp[m_pos]
     g_exp_neg = g_exp[m_neg]
-    g_fit_pos = g_fit[m_pos]
-    g_fit_neg = g_fit[m_neg]
     g_ini_pos = g_ini[m_pos]
     g_ini_neg = g_ini[m_neg]
+    g_fit_pos = g_fit[m_pos]
+    g_fit_neg = g_fit[m_neg]
 
-    ug_fit_pos = +(g_fit_pos**2) - g_exp_pos**2
-    ug_fit_neg = -(g_fit_neg**2) + g_exp_neg**2
     ug_ini_pos = +(g_ini_pos**2) - g_exp_pos**2
     ug_ini_neg = -(g_ini_neg**2) + g_exp_neg**2
+    ug_fit_pos = +(g_fit_pos**2) - g_exp_pos**2
+    ug_fit_neg = -(g_fit_neg**2) + g_exp_neg**2
 
     G_exp_pos = G_exp[m_pos]
     G_exp_neg = G_exp[m_neg]
-    G_fit_pos = G_fit[m_pos]
-    G_fit_neg = G_fit[m_neg]
     G_ini_pos = G_ini[m_pos]
     G_ini_neg = G_ini[m_neg]
+    G_fit_pos = G_fit[m_pos]
+    G_fit_neg = G_fit[m_neg]
 
-    uG_fit_pos = +(G_fit_pos**2) - G_exp_pos**2
-    uG_fit_neg = -(G_fit_neg**2) + G_exp_neg**2
     uG_ini_pos = +(G_ini_pos**2) - G_exp_pos**2
     uG_ini_neg = -(G_ini_neg**2) + G_exp_neg**2
-
-    Delta_mV = solution["Delta_mV"]
-    tau = solution["tau"]
+    uG_fit_pos = +(G_fit_pos**2) - G_exp_pos**2
+    uG_fit_neg = -(G_fit_neg**2) + G_exp_neg**2
 
     plt.close(num)
     fig, axs = plt.subplots(
@@ -245,7 +244,7 @@ def show_fitting(solution: dict, num: int = 0):
     fig.tight_layout()
 
 
-def show_stats(solution: dict):
+def show_stats(solution: SolutionDict):
     print(f"# Model: '{solution['model']}'")
     print(f"# Optimizer: '{solution['optimizer']}'")
 
@@ -254,43 +253,60 @@ def show_stats(solution: dict):
         f"# τ = {solution['popt'][0]}{f' ({solution['perr'][0]})' if not solution['fixed'][0] else ''}"
     )
     print(
-        f"# T = {solution['popt'][1]*1e3}{f' ({solution['perr'][1]*1e3})' if not solution['fixed'][1] else ''} mK"
+        f"# T = {solution['popt'][1]}{f' ({solution['perr'][1]})' if not solution['fixed'][1] else ''} K"
     )
     print(
-        f"# Δ = {solution['popt'][2]*1e3}{f' ({solution['perr'][2]*1e3})' if not solution['fixed'][2] else ''} µeV"
+        f"# Δ = {solution['popt'][2]}{f' ({solution['perr'][2]})' if not solution['fixed'][2] else ''} mV"
     )
     print(
-        f"# Γ = {solution['popt'][3]*1e3}{f' ({solution['perr'][3]*1e3})' if not solution['fixed'][3] else ''} µeV"
+        f"# Γ = {solution['popt'][3]}{f' ({solution['perr'][3]})' if not solution['fixed'][3] else ''} mV"
     )
 
     if "pat" in solution["model"]:
         print(
-            f"# A = {solution['popt'][4]*1e3}{f' ({solution['perr'][4]*1e3})' if not solution['fixed'][4] else ''} µV"
+            f"# A = {solution['popt'][4]}{f' ({solution['perr'][4]})' if not solution['fixed'][4] else ''} mV"
         )
         print(
             f"# ν = {solution['popt'][5]}{f' ({solution['perr'][5]})' if not solution['fixed'][5] else ''} GHz"
         )
 
-    print(f"\n# --- input ---")
-    print(f"# solution = fit_current(\n#     V_mV=V_mV,\n#     I_nA=I_nA,")
-    print(
-        f"#     tau=({solution['guess'][0]}, ({solution['lower'][0]}, {solution['upper'][0]}), {solution['fixed'][0]}),"
-    )
-    print(
-        f"#     T_K=({solution['guess'][1]}, ({solution['lower'][1]}, {solution['upper'][1]}), {solution['fixed'][1]}),"
-    )
-    print(
-        f"#     Delta_mV=({solution['guess'][2]}, ({solution['lower'][2]}, {solution['upper'][2]}), {solution['fixed'][2]}),"
-    )
-    print(
-        f"#     Gamma_mV=({solution['guess'][3]}, ({solution['lower'][3]}, {solution['upper'][3]}), {solution['fixed'][3]}),"
-    )
-    print(
-        f"#     A_mV=({solution['guess'][4]}, ({solution['lower'][4]}, {solution['upper'][4]}), {solution['fixed'][4]}),"
-    )
-    print(
-        f"#     nu_GHz=({solution['guess'][5]}, ({solution['lower'][5]}, {solution['upper'][5]}), {solution['fixed'][5]}),"
-    )
+    print("\n# --- input ---")
+    print("# solution = fit_current(\n#     V_mV=V_mV,\n#     I_nA=I_nA,")
+    print(f"#     tau = ", end="")
+    print(f"({solution['guess'][0]:.05f}, ", end="")
+    print(f"({solution['lower'][0]:.05f}, ", end="")
+    print(f"{solution['upper'][0]:.05f}), ", end="")
+    print(f"{solution['fixed'][0]}),")
+
+    print("#     T_K = ", end="")
+    print(f"({solution['guess'][1]:.05f}, ", end="")
+    print(f"({solution['lower'][1]:.05f}, ", end="")
+    print(f"{solution['upper'][1]:.05f}), ", end="")
+    print(f"{solution['fixed'][1]}),")
+
+    print("#     Delta_mV = ", end="")
+    print(f"({solution['guess'][2]:.05f}, ", end="")
+    print(f"({solution['lower'][2]:.05f}, ", end="")
+    print(f"{solution['upper'][2]:.05f}), ", end="")
+    print(f"{solution['fixed'][2]}),")
+
+    print("#     Gamma_mV = ", end="")
+    print(f"({solution['guess'][3]:.05f}, ", end="")
+    print(f"({solution['lower'][3]:.05f}, ", end="")
+    print(f"{solution['upper'][3]:.05f}), ", end="")
+    print(f"{solution['fixed'][3]}),")
+
+    print("#     A_mV = ", end="")
+    print(f"({solution['guess'][4]:.05f}, ", end="")
+    print(f"({solution['lower'][4]:.05f}, ", end="")
+    print(f"{solution['upper'][4]:.05f}), ", end="")
+    print(f"{solution['fixed'][4]}),")
+
+    print("#     nu_GHz = ", end="")
+    print(f"({solution['guess'][5]:05.02f}, ", end="")
+    print(f"({solution['lower'][5]:05.02f}, ", end="")
+    print(f"{solution['upper'][5]:05.02f}), ", end="")
+    print(f"{solution['fixed'][5]}),")
 
     print(f'#     model="{solution['model']}",')
     print(f'#     optimizer="{solution['optimizer']}",')
