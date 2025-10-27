@@ -1,6 +1,7 @@
 import numpy as np
 from numpy.typing import NDArray
 
+import jax
 import jax.numpy as jnp
 from jax import vmap, jit, lax, Array
 
@@ -16,6 +17,9 @@ G_0_muS_jax: Array = jnp.array(G_0_muS)
 
 const176: Array = jnp.array(1.76)
 const174: Array = jnp.array(1.74)
+
+
+jax.config.update("jax_enable_x64", True)
 
 
 @jit
