@@ -4,7 +4,7 @@ import sys
 sys.path.append("/Users/oliver/Documents/p5control-bluefors-evaluation")
 
 from theory.models.constants import k_B_eV
-from theory.models.constants import G_0
+from theory.models.constants import G_0_S as G_0
 
 from theory.models.functions import bin_y_over_x
 
