@@ -46,7 +46,7 @@ V_tol_mV: int = 6  # meV
 tau_tol: int = 4
 T_tol_K: int = 4  # K
 Delta_tol_meV: int = 6  # meV
-Gamma_tol_meV: int = 6  # meV
+Gamma_tol_meV: int = 9  # meV
 
 # FCS settings
 m_max: int = 10
