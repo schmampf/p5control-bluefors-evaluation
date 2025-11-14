@@ -8,9 +8,9 @@ HOME_DIR = "/Users/oliver/Documents/p5control-bluefors-evaluation/"
 sys.path.append(HOME_DIR)
 
 # import models
-from theory.models.dynes_jnp import get_I_nA as get_I_nA_dynes
-from theory.models.hamiltonian_approach import get_I_nA as get_I_nA_HA
-from theory.models.full_counting_statistic_pbar import get_I_nA as get_I_nA_FCS_pbar
+from theory.models.bcs_jnp import get_I_nA as get_I_nA_dynes
+from theory.models.ha import get_I_nA as get_I_nA_HA
+from theory.models.fcs_pbar import get_I_nA as get_I_nA_FCS_pbar
 
 # number of maximum charges
 from theory.models.constants import m_max
