@@ -30,7 +30,7 @@ from theory.models.constants import *
 # from theory.models.hamiltonian_approach import get_I_nA as get_I_nA_HA
 # from theory.models.full_counting_statistic import get_I_nA as get_I_nA_FCS
 # from theory.models.full_counting_statistic_pbar import get_I_nA as get_I_nA_FCS_pbar
-from theory.models.PAT import get_I_pat_nA
+# from theory.models.PAT import get_I_pat_nA
 
 # from theory.models.PAMAR import get_I_nA as get_I_nA_PAMAR
 
