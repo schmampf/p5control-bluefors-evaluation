@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from typing import TypeAlias
 from numpy.typing import NDArray
 
 from theory.models.constants import V_tol_mV
@@ -8,13 +9,15 @@ from theory.models.constants import T_tol_K
 from theory.models.constants import Delta_tol_meV
 from theory.models.constants import Gamma_tol_meV
 
+NDArray64: TypeAlias = NDArray[np.float64]
+
 
 # performance binning
 def bin_y_over_x(
-    x: NDArray[np.float64],
-    y: NDArray[np.float64],
-    x_bins: NDArray[np.float64],
-) -> NDArray[np.float64]:
+    x: NDArray64,
+    y: NDArray64,
+    x_bins: NDArray64,
+) -> NDArray64:
     x_nu = np.append(x_bins, 2 * x_bins[-1] - x_bins[-2])
     x_nu = x_nu - (x_nu[1] - x_nu[0]) / 2
     count, _ = np.histogram(x, bins=x_nu, weights=None)
@@ -24,11 +27,11 @@ def bin_y_over_x(
 
 
 def oversample(
-    x: NDArray[np.float64],
-    y: NDArray[np.float64],
+    x: NDArray64,
+    y: NDArray64,
     upsample: int = 100,
     upsample_method: str = "linear",
-) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+) -> tuple[NDArray64, NDArray64]:
     if upsample <= 1:
         return x, y  # nothing to do
 
@@ -58,7 +61,7 @@ def cache_hash(
     Delta_2_meV: float,
     Gamma_1_meV: float,
     Gamma_2_meV: float,
-    string="HA",
+    string: str = "HA",
 ) -> str:
     string += "_"
     string += f"V_max={V_max_mV:.{V_tol_mV}f}mV_"
@@ -79,7 +82,7 @@ def cache_hash_pbar(
     Delta_2_meV: float,
     Gamma_1_meV: float,
     Gamma_2_meV: float,
-    string="FCS",
+    string: str = "FCS",
 ) -> str:
     string += "_"
     string += f"tau={tau:.{tau_tol}f}_"
