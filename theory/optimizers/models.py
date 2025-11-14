@@ -7,7 +7,7 @@ from jax import Array, jit, config
 from numpy.typing import NDArray, ArrayLike
 
 from theory.models.PAT import get_I_pat_nA_from_I0_A0
-from theory.models.dynes_jnp import G_0_muS_jax, currents, thermal_energy_gap
+from theory.models.bcs_jnp import G_0_muS_jax, currents, thermal_energy_gap
 
 jax.config.update("jax_enable_x64", True)
 

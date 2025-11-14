@@ -4,7 +4,7 @@ from numpy.typing import NDArray
 from jax import Array, jit, jacfwd
 from jaxfit import CurveFit
 
-from theory.models.dynes_jnp import G_0_muS_jax, currents, thermal_energy_gap
+from theory.models.bcs_jnp import G_0_muS_jax, currents, thermal_energy_gap
 
 importlib.reload(sys.modules["theory.models.dynes_jnp"])
 
