@@ -1,14 +1,11 @@
 import numpy as np
 from numpy.typing import NDArray
-import sys
 
-sys.path.append("/Users/oliver/Documents/p5control-bluefors-evaluation")
+from .constants import G_0_muS
 
-from theory.models.constants import G_0_muS
+from .functions import bin_y_over_x
 
-from theory.models.functions import bin_y_over_x
-
-from theory.models.dynes import Delta_meV_of_T, f_of_E
+from .bcs import Delta_meV_of_T, f_of_E
 
 
 def Z_of_tau(tau: float) -> float:
@@ -108,6 +105,6 @@ def get_I_nA(
     I_1e_nA = bin_y_over_x(V_mV_temp, I_1e_nA, V_mV)
 
     I_tot_nA = I_2e_nA + I_1e_nA
-    I_nA = np.vstack((I_tot_nA, I_1e_nA, I_2e_nA))
+    I_nA = np.vstack((I_tot_nA, I_1e_nA, I_2e_nA)).T
 
     return I_nA
