@@ -22,6 +22,7 @@ def AB_of_E(
     NDArray[np.float64],
 ]:
     E_meV = np.array(np.abs(E_meV) + 1j * Gamma_meV, dtype="complex128")
+    E_meV += 1e-300  # avoid runtime warning
     u2 = 0.5 * (1 + np.sqrt(E_meV**2 - Delta_meV**2) / E_meV)
     v2 = 1 - u2
     Z2 = np.square(Z)
