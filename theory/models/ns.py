@@ -9,13 +9,13 @@ from .utg import get_I_nA as get_I_nA_utg
 
 
 def get_I_nA(
-    V_mV: NDArray64,
+    V_mV: NDArray64 = np.linspace(0, 0.6, 101, dtype="float64"),
+    A_mV: int | float | NDArray64 = 0.0,
+    tau: int | float | list[float] | NDArray64 = 0.0,
     tau_0: int | float = 0.0,
-    tau: int | float = 0.0,
     T_K: int | float = 0,
     Delta_meV: int | float = 189e-3,
     Gamma_meV: int | float = 10e-3,
-    A_mV: int | float = 0.0,
     nu_GHz: int | float = 10.0,
     Gamma_min_meV: float = 0.0001,
 ) -> NDArray64:
