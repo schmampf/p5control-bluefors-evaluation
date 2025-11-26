@@ -125,7 +125,7 @@ def get_I_nA(
     if Delta1_meV_T > 0.0:
         n1 = N_of_E(
             E_meV=E_meV,
-            Delta_meV=Delta1_meV,
+            Delta_meV=Delta1_meV_T,
             Gamma_meV=Gamma1_meV,
         )
         # Interpolate the shifted DOS
@@ -135,7 +135,7 @@ def get_I_nA(
     if Delta2_meV_T > 0.0:
         n2 = N_of_E(
             E_meV=E_meV,
-            Delta_meV=Delta2_meV,
+            Delta_meV=Delta2_meV_T,
             Gamma_meV=Gamma2_meV,
         )
         N2 = np.interp(energy2_eV_mesh, E_meV, n2, left=1.0, right=1.0)
