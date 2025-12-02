@@ -625,7 +625,7 @@ class IVPlot(IVEvaluation, BasePlot):
 
         # Apply optional smoothing to dI/dV map
         if self.smoothing:
-            didv = do_smoothing(
+            dvdi = do_smoothing(
                 data=np.array([dvdi]),
                 window_length=self.window_length,
                 polyorder=self.polyorder,
@@ -871,7 +871,7 @@ class IVPlot(IVEvaluation, BasePlot):
         ax = axs[0]
         cax = axs[1]
 
-        # Load data: voltage (V), position (Y), differential conductance (dI/dV)
+        # Load data: voltage (V), position (Y), differential resistance (dV/dI)
         i, y, dvdi = self.get_dvdi_iy()
 
         # Apply optional smoothing to dI/dV map
@@ -908,9 +908,10 @@ class IVPlot(IVEvaluation, BasePlot):
         )
 
         if self.dvdi_norm is None:
-            dvdi_norm_value, dvdi_norm_string = get_norm(i)
+            dvdi_norm_value, dvdi_norm_string = get_norm(dvdi)
         else:
             dvdi_norm_value, dvdi_norm_string = self.dvdi_norm
+
         dvdi_c_lim = (
             dvdi_c_lim[0] if dvdi_c_lim[0] is not None else self.dvdi_c_lim[0],
             dvdi_c_lim[1] if dvdi_c_lim[1] is not None else self.dvdi_c_lim[1],
