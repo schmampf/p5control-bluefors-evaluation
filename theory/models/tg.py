@@ -33,8 +33,7 @@ from scipy.special import jv
 
 from .constants import h_e_pVs
 
-ERROR = "A_mV must be float or array. "
-ERROR += "I_nA must match shape of (A_mV, V_mV)."
+ERROR = "A_mV must be float or array. I_nA must match shape of (A_mV, V_mV)."
 
 
 def get_I_pat_nA(
