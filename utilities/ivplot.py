@@ -104,6 +104,7 @@ class IVPlot(IVEvaluation, BasePlot):
         self.plot_T = True
         self.plot_index = 0
         self.contrast = 1
+        self.conductance = 3.0
 
         self.plot_down_sweep = False
 
@@ -972,6 +973,101 @@ class IVPlot(IVEvaluation, BasePlot):
     # endregion
 
     # region get fig
+
+    def fig_iv_total(
+        self,
+        fig_nr: int = 0,
+        width_ratios: list[float] = [4, 0.2],
+        cmap: ListedColormap | None = None,
+        i_lim: tuple[float | None, float | None] = (None, None),
+        v_lim: tuple[float | None, float | None] = (None, None),
+        y_lim: tuple[float | None, float | None] = (None, None),
+        didv_lim: tuple[float | None, float | None] = (None, None),
+        dvdi_lim: tuple[float | None, float | None] = (None, None),
+        contrast: float = 1,
+    ):
+        plt.close(fig_nr)
+        fig, axs = plt.subplots(
+            num=fig_nr,
+            nrows=2,
+            ncols=2,
+            figsize=(6, 5),
+            dpi=self.dpi,
+            gridspec_kw={"width_ratios": (1, 3), "height_ratios": (3, 1)},
+            constrained_layout=True,
+        )
+
+        self.v_norm = (1e-3, "$m$")
+        self.i_norm = (1e-9, "$n$")
+
+        # get axs
+        axs[1, 1] = self.ax_didv_v(
+            plain=False,
+            ax=axs[1, 1],
+            index=fig_nr,
+            didv_lim=(None, None),
+        )
+        # get axs
+        axs[0, 0] = self.ax_dvdi_i(
+            plain=False,
+            ax=axs[0, 0],
+            index=fig_nr,
+            dvdi_lim=dvdi_lim,
+            inverse=True,
+        )
+
+        axs[0, 1] = self.ax_v_i(
+            mode="i_v",
+            ax=axs[0, 1],
+            skip=[10, -10],
+            plain=False,
+            inverse=True,
+        )
+        axs[0, 0].tick_params(labeltop=True, labelbottom=False)
+        axs[0, 1].tick_params(
+            labeltop=True, labelbottom=False, labelleft=False, labelright=True
+        )
+        axs[1, 1].tick_params(labelleft=False, labelright=True)
+        axs[0, 0].xaxis.set_label_position("top")
+        axs[0, 1].xaxis.set_label_position("top")
+        axs[0, 1].yaxis.set_label_position("right")
+        axs[1, 1].yaxis.set_label_position("right")
+
+        y = self.y_axis[fig_nr]
+        text = rf"{self.y_characters[0]}$={round(y, 4):.3f}\,${self.y_characters[1]}"
+        T = self.to_plot["temperature"][fig_nr]
+        if np.logical_not(np.isnan(T)):
+            text += f"\n$T={round(T, 2)}\,$K"
+        # text = "bla"
+        axs[1, 0].text(0, 0.5, text, ha="left", va="center")
+        axs[1, 0].set_xticks([])
+        axs[1, 0].set_yticks([])
+        for spine in axs[1, 0].spines.values():
+            spine.set_visible(False)
+
+        axs[1, 0].tick_params(
+            bottom=False,
+            top=False,
+            left=False,
+            right=False,  # no tick marks
+            labelbottom=False,
+            labeltop=False,
+            labelleft=False,
+            labelright=False,  # no labels
+        )
+
+        axs[0, 0].set_ylim(
+            -0.6 * self.conductance * 77.48, 0.6 * self.conductance * 77.48
+        )
+        axs[0, 0].set_xlim(0, 2 / (0.6 * self.conductance * 77.48) * 1e3)
+        axs[0, 1].set_ylim(
+            -0.6 * self.conductance * 77.48, 0.6 * self.conductance * 77.48
+        )
+        axs[0, 1].set_xlim(-0.6, 0.6)
+        axs[1, 1].set_ylim(0, self.conductance * 2)
+        axs[1, 1].set_xlim(-0.6, 0.6)
+
+        return fig, axs
 
     def fig_didv_vy(
         self,
