@@ -44,6 +44,7 @@ utilities/__pycache__/
 *.csv
 *.dat
 *.pickle
+*/IV/*
 
 # specific files
 *MCBJ_seeblau_ultra.png
