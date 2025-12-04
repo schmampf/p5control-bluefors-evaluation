@@ -1,5 +1,7 @@
 # region imports
+import os
 import sys
+import shutil
 import logging
 import importlib
 
@@ -12,12 +14,13 @@ from tqdm import tqdm
 from contextlib import contextmanager
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from theory.models.constants import G_0_S, G_0_muS
 from utilities.baseplot import BasePlot
 from utilities.ivevaluation import IVEvaluation
 from utilities.basefunctions import get_norm
 from utilities.basefunctions import get_ext
 from utilities.basefunctions import get_z_lim
-from utilities.corporate_design_colors_v4 import cmap
+from utilities.corporate_design_colors_v4 import cmap, colors
 
 
 importlib.reload(sys.modules["utilities.baseplot"])
@@ -31,6 +34,9 @@ logger = logging.getLogger(__name__)
 from scipy.signal import savgol_filter
 from scipy.interpolate import NearestNDInterpolator
 
+import os
+import subprocess
+import glob
 
 # Increase the limit
 # Or disable the warning entirely
@@ -104,7 +110,9 @@ class IVPlot(IVEvaluation, BasePlot):
         self.plot_T = True
         self.plot_index = 0
         self.contrast = 1
-        self.conductance = 3.0
+        self.G_N = 3.0
+        self.iv_contrast = 2.0
+        self.linear = False
 
         self.plot_down_sweep = False
 
@@ -666,13 +674,13 @@ class IVPlot(IVEvaluation, BasePlot):
 
         if not inverse:
             ax.set_xlabel(rf"$I$ ({i_norm_string}A)")
-            ax.set_ylabel(rf"d$V$/d$I$ ({dvdi_norm_string}$\Omega$)")
+            ax.set_ylabel(rf"d$V$/d$I$ ({dvdi_norm_string}$R_0$)")
             ax.plot(i / i_norm_value, dvdi / dvdi_norm_value, ".", **kwargs)
             ax.set_xlim(left=i_lim[0], right=i_lim[1])
             ax.set_ylim(bottom=dvdi_lim[0], top=dvdi_lim[1])
 
         else:
-            ax.set_xlabel(rf"d$V$/d$I$ ({dvdi_norm_string}$\Omega$)")
+            ax.set_xlabel(rf"d$V$/d$I$ ({dvdi_norm_string}$R_0$)")
             ax.set_ylabel(rf"$I$ ({i_norm_string}A)")
             ax.plot(dvdi / dvdi_norm_value, i / i_norm_value, ".", **kwargs)
             ax.set_xlim(left=dvdi_lim[0], right=dvdi_lim[1])
@@ -960,7 +968,7 @@ class IVPlot(IVEvaluation, BasePlot):
         fig.colorbar(
             im,
             cax=cax,
-            label=rf"d$V$/d$I$ ({dvdi_norm_string}$\Omega$)",
+            label=rf"d$V$/d$I$ ({dvdi_norm_string}$R_0$)",
             orientation=orientation,
         )
 
@@ -977,14 +985,7 @@ class IVPlot(IVEvaluation, BasePlot):
     def fig_iv_total(
         self,
         fig_nr: int = 0,
-        width_ratios: list[float] = [4, 0.2],
-        cmap: ListedColormap | None = None,
-        i_lim: tuple[float | None, float | None] = (None, None),
-        v_lim: tuple[float | None, float | None] = (None, None),
-        y_lim: tuple[float | None, float | None] = (None, None),
-        didv_lim: tuple[float | None, float | None] = (None, None),
-        dvdi_lim: tuple[float | None, float | None] = (None, None),
-        contrast: float = 1,
+        index: int = 0,
     ):
         plt.close(fig_nr)
         fig, axs = plt.subplots(
@@ -997,31 +998,43 @@ class IVPlot(IVEvaluation, BasePlot):
             constrained_layout=True,
         )
 
+        temp_norm = self.v_norm, self.i_norm, self.didv_norm, self.dvdi_norm
+
         self.v_norm = (1e-3, "$m$")
         self.i_norm = (1e-9, "$n$")
+        self.didv_norm = (1, "")
+        self.dvdi_norm = (1, "")
 
         # get axs
         axs[1, 1] = self.ax_didv_v(
             plain=False,
             ax=axs[1, 1],
-            index=fig_nr,
+            index=index,
             didv_lim=(None, None),
+            color=colors(0),
+            linestyle="",
+            markersize=1,
         )
         # get axs
         axs[0, 0] = self.ax_dvdi_i(
             plain=False,
             ax=axs[0, 0],
-            index=fig_nr,
-            dvdi_lim=dvdi_lim,
+            index=index,
             inverse=True,
+            color=colors(0),
+            linestyle="",
+            markersize=1,
         )
-
         axs[0, 1] = self.ax_v_i(
             mode="i_v",
             ax=axs[0, 1],
+            index=index,
             skip=[10, -10],
             plain=False,
             inverse=True,
+            color=colors(0),
+            linestyle="",
+            markersize=1,
         )
         axs[0, 0].tick_params(labeltop=True, labelbottom=False)
         axs[0, 1].tick_params(
@@ -1033,11 +1046,16 @@ class IVPlot(IVEvaluation, BasePlot):
         axs[0, 1].yaxis.set_label_position("right")
         axs[1, 1].yaxis.set_label_position("right")
 
-        y = self.y_axis[fig_nr]
+        y = self.y_axis[index]
         text = rf"{self.y_characters[0]}$={round(y, 4):.3f}\,${self.y_characters[1]}"
-        T = self.to_plot["temperature"][fig_nr]
-        if np.logical_not(np.isnan(T)):
-            text += f"\n$T={round(T, 2)}\,$K"
+
+        T = self.to_plot["temperature"]
+        if self.plot_T:
+            if np.logical_not(np.isnan(np.nanmax(T))):
+                T_temp = np.nan
+                if np.logical_not(np.isnan(T[index])):
+                    T_temp = T[index]
+                text += f"\n$T={round(T_temp, 2):.2f}\,$K"
         # text = "bla"
         axs[1, 0].text(0, 0.5, text, ha="left", va="center")
         axs[1, 0].set_xticks([])
@@ -1055,18 +1073,17 @@ class IVPlot(IVEvaluation, BasePlot):
             labelleft=False,
             labelright=False,  # no labels
         )
+        v_lim = 0.8
+        i_lim = v_lim * self.G_N * G_0_muS
+        axs[0, 0].set_ylim(-i_lim, i_lim)
+        axs[0, 0].set_xlim(0, self.iv_contrast / self.G_N)
 
-        axs[0, 0].set_ylim(
-            -0.6 * self.conductance * 77.48, 0.6 * self.conductance * 77.48
-        )
-        axs[0, 0].set_xlim(0, 2 / (0.6 * self.conductance * 77.48) * 1e3)
-        axs[0, 1].set_ylim(
-            -0.6 * self.conductance * 77.48, 0.6 * self.conductance * 77.48
-        )
-        axs[0, 1].set_xlim(-0.6, 0.6)
-        axs[1, 1].set_ylim(0, self.conductance * 2)
-        axs[1, 1].set_xlim(-0.6, 0.6)
+        axs[0, 1].set_ylim(-i_lim, i_lim)
+        axs[0, 1].set_xlim(-v_lim, v_lim)
+        axs[1, 1].set_ylim(0, self.iv_contrast * self.G_N)
+        axs[1, 1].set_xlim(-v_lim, v_lim)
 
+        self.v_norm, self.i_norm, self.didv_norm, self.dvdi_norm = temp_norm
         return fig, axs
 
     def fig_didv_vy(
@@ -1348,7 +1365,8 @@ class IVPlot(IVEvaluation, BasePlot):
                     fig_nr=self.plot_index,
                 )
                 fig.suptitle(
-                    f"{self.sub_folder}/{self.title}/{self.title_of_plot}/didv_vy_T"
+                    f"{self.sub_folder}/{self.title}/{self.title_of_plot}/didv_vy_T",
+                    fontsize=8,
                 )
                 self.saveFigure(
                     fig, sub_title="didv_vy_T", sub_folder=self.title_of_plot
@@ -1362,7 +1380,8 @@ class IVPlot(IVEvaluation, BasePlot):
                     fig_nr=self.plot_index,
                 )
                 fig.suptitle(
-                    f"{self.sub_folder}/{self.title}/{self.title_of_plot}/didv_vy"
+                    f"{self.sub_folder}/{self.title}/{self.title_of_plot}/didv_vy",
+                    fontsize=8,
                 )
                 self.saveFigure(fig, sub_title="didv_vy", sub_folder=self.title_of_plot)
                 self.plot_index += 1
@@ -1377,7 +1396,8 @@ class IVPlot(IVEvaluation, BasePlot):
                     fig_nr=self.plot_index,
                 )
                 fig.suptitle(
-                    f"{self.sub_folder}/{self.title}/{self.title_of_plot}/dvdi_iy_T"
+                    f"{self.sub_folder}/{self.title}/{self.title_of_plot}/dvdi_iy_T",
+                    fontsize=8,
                 )
                 self.saveFigure(
                     fig, sub_title="dvdi_iy_T", sub_folder=self.title_of_plot
@@ -1391,61 +1411,105 @@ class IVPlot(IVEvaluation, BasePlot):
                     fig_nr=self.plot_index,
                 )
                 fig.suptitle(
-                    f"{self.sub_folder}/{self.title}/{self.title_of_plot}/dvdi_iy"
+                    f"{self.sub_folder}/{self.title}/{self.title_of_plot}/dvdi_iy",
+                    fontsize=8,
                 )
                 self.saveFigure(fig, sub_title="dvdi_iy", sub_folder=self.title_of_plot)
                 self.plot_index += 1
 
         if self.plot_ivs:
-            logger.info("(%s) saveIVs()", self._iv_plot_name)
             with suppress_logging():
-                try:
-                    fig, ax = self.fig_ididv_v(
-                        v_lim=v_lim,
-                        i_lim=i_lim,
-                        didv_lim=didv_lim,
-                        dvdi_lim=dvdi_lim,
-                        fig_nr=self.plot_index,
-                        plain=True,
-                    )
-                    fig.suptitle(
-                        f"{self.sub_folder}/{self.title}/{self.title_of_plot}/IV/0000_y=NAN",
-                        fontsize=8,
-                    )
-                    self.saveFigure(
-                        fig,
-                        sub_title=f"0000_y=NAN",
-                        sub_folder=f"{self.title_of_plot}/IV",
-                    )
-                    self.plot_index += 1
-                except KeyError:
-                    logger.warning(
-                        "(%s) No plain data available for %s",
-                        self._iv_plot_name,
-                        self.title_of_plot,
-                    )
-                    pass
 
-                for j, y in enumerate(tqdm(self.mapped["y_axis"])):
-                    fig, ax = self.fig_ididv_v(
-                        v_lim=v_lim,
-                        i_lim=i_lim,
-                        didv_lim=didv_lim,
-                        dvdi_lim=dvdi_lim,
-                        fig_nr=self.plot_index,
-                        plain=False,
-                        index=j,
+                folder = os.path.join(
+                    "figures",
+                    self.sub_folder,
+                    self.title,
+                    self.title_of_plot,
+                    "IV",
+                )
+
+                # Delete folder and everything inside it
+                shutil.rmtree(folder, ignore_errors=True)
+
+                try:
+                    logic = np.where(
+                        self.to_plot["differential_conductance_counter"] > 0,
+                        True,
+                        False,
                     )
-                    fig.suptitle(
-                        f"{self.sub_folder}/{self.title}/{self.title_of_plot}/IV/{j+1:04d}_y={y:05.3f}",
-                        fontsize=8,
+                except KeyError:
+                    logic = np.full_like(self.y_axis, True)
+
+                for i, y in enumerate(tqdm(self.y_axis)):
+                    if logic[i]:
+                        if not self.linear:
+                            fig, axs = self.fig_iv_total(
+                                fig_nr=self.plot_index + i, index=0 if i == 0 else i + 1
+                            )
+                        else:
+                            fig, axs = self.fig_iv_total(
+                                fig_nr=self.plot_index + i, index=i
+                            )
+
+                        fig.suptitle(
+                            f"{self.sub_folder}/{self.title}/{self.title_of_plot}",
+                            fontsize=8,
+                        )
+                        plt.close(self.plot_index + i)
+                        self.saveFigure(
+                            fig,
+                            sub_title=f"y={round(y, 4)}",
+                            sub_folder=f"{self.title_of_plot}/IV",
+                        )
+
+                # Build movie from individual IV PNGs using ffmpeg
+                iv_pattern = os.path.join(
+                    "figures",
+                    self.sub_folder,
+                    self.title,
+                    self.title_of_plot,
+                    "IV",
+                    "*.png",
+                )
+
+                iv_files = sorted(glob.glob(iv_pattern))
+                if not iv_files:
+                    logger.warning(
+                        "(%s) No IV PNG files found for movie at pattern: %s",
+                        self._iv_plot_name,
+                        iv_pattern,
                     )
-                    self.saveFigure(
-                        fig,
-                        sub_title=f"{j+1:04d}_y={y:05.3f}",
-                        sub_folder=f"{self.title_of_plot}/IV",
-                    )
-                    self.plot_index += 1
+                    return
+
+                output_mp4 = os.path.join(
+                    "figures",
+                    self.sub_folder,
+                    self.title,
+                    self.title_of_plot,
+                    "ivs.mp4",
+                )
+
+                command = [
+                    "ffmpeg",
+                    "-y",  # overwrite existing file without asking
+                    "-framerate",
+                    "10",
+                    "-pattern_type",
+                    "glob",
+                    "-i",
+                    iv_pattern,
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    output_mp4,
+                ]
+                subprocess.run(
+                    command,
+                    stdout=subprocess.DEVNULL,  # discard stdout
+                    stderr=subprocess.DEVNULL,  # discard stderr (ffmpeg logs))
+                )
+            logger.info("(iv plot) saved ivs.")
 
     # endregion
 
