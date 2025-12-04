@@ -794,8 +794,9 @@ class IVEvaluation(BaseEvaluation):
         # Calculate differential resistance if eva_voltage is enabled
         if self.eva_voltage:
             # Compute the gradient of the voltage with respect to the current axis
-            dictionary["differential_resistance"] = np.gradient(
-                dictionary["voltage"], self.current_axis, axis=1
+            dictionary["differential_resistance"] = (
+                np.gradient(dictionary["voltage"], self.current_axis, axis=1)
+                * conductance_quantum
             )
             # Compute the average temperature from the 'temperature_voltage' data
             dictionary["temperature"] = np.nanmean(
@@ -1028,6 +1029,20 @@ class IVEvaluation(BaseEvaluation):
                     amplitude,
                     to_evaluate[string],
                     self.amplitude_axis,
+                )
+
+                def fill_up(result, counter):
+                    last_valid = None
+                    for i in range(len(result)):
+                        if counter[i] > 0:
+                            last_valid = result[i].copy()
+                        elif last_valid is not None:
+                            result[i] = last_valid
+                    return result
+
+                evaluated[index_to_evaluate][string] = fill_up(
+                    evaluated[index_to_evaluate][string],
+                    evaluated[index_to_evaluate][f"{string}_counter"],
                 )
 
         return tuple(evaluated)
