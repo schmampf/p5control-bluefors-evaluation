@@ -27,7 +27,7 @@ def show_fitting(solution: SolutionDict, num: int = 0):
     perr: NDArray64 = np.array(solution["perr"], dtype=np.float64)
 
     Delta_mV: float = solution["Delta_mV"]
-    tau: float = solution["tau"]
+    G_N: float = solution["G_N"]
 
     V_nan_0_mV = np.where(V_mV == 0.0, np.nan, V_mV)
     m_pos = V_mV > 0
@@ -88,10 +88,10 @@ def show_fitting(solution: SolutionDict, num: int = 0):
         return E_meV * Delta_mV
 
     def G_G_0_to_G_arbu(x):
-        return x / tau
+        return x / G_N
 
     def G_arbu_to_G_G_0(x):
-        return x * tau
+        return x * G_N
 
     def I_nA_to_I_arbu(x):
         return x / (1e-9 * 2 * e / h * Delta_mV * 1e-3)
@@ -272,7 +272,7 @@ def show_stats(solution: SolutionDict):
 
     print("\n# --- input ---")
     print("# solution = fit_current(\n#     V_mV=V_mV,\n#     I_nA=I_nA,")
-    print(f"#     tau = ", end="")
+    print(f"#     G_N = ", end="")
     print(f"({solution['guess'][0]:.05f}, ", end="")
     print(f"({solution['lower'][0]:.05f}, ", end="")
     print(f"{solution['upper'][0]:.05f}), ", end="")
