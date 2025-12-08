@@ -2,15 +2,25 @@
 document sting
 """
 
-from typing import Callable, Optional, TypeAlias
+from typing import Optional
 
 import numpy as np
-from numpy.typing import NDArray, ArrayLike
+from numpy.typing import NDArray
 from scipy.optimize import curve_fit  # type: ignore
 
-NDArray64: TypeAlias = NDArray[np.float64]
-ModelFunction: TypeAlias = Callable[..., ArrayLike]
-ModelType: TypeAlias = tuple[ModelFunction, NDArray[np.bool]]
+from models import NDArray64, ModelFunction
+
+
+def weights_to_sigma(
+    weights: NDArray64,
+    min_weight: float = 0.0,
+) -> tuple[NDArray64, NDArray[np.bool]]:
+    """Map reliability weights in [0,1] to sigma for curve_fit."""
+    # Avoid exact zeros to prevent infinite weight
+    mask = weights > min_weight
+    weights = np.where(mask, weights, np.nan)
+    sigma = 1.0 / np.sqrt(weights)
+    return sigma, mask
 
 
 def optimizers(
@@ -18,7 +28,7 @@ def optimizers(
     function: ModelFunction,
     x_data: NDArray64,
     y_data: NDArray64,
-    sigma: Optional[NDArray64],
+    weights: Optional[NDArray64],
     guess: NDArray64,
     lower: NDArray64,
     upper: NDArray64,
@@ -32,21 +42,20 @@ def optimizers(
         ``100*(N+1)`` is the maximum where N is the number of elements
         in `x0`.
     """
+    if weights is None:
+        weights = np.ones_like(y_data, dtype="float64")
 
-    if sigma is None:
-        sigma = np.ones_like(x_data, dtype="float64")
-        # now problems with curve_fit overload
-        # ist das wirklich sinnvoll? sigma ist ja eine ungenauigkeit.. ???
+    sigma, mask = weights_to_sigma(weights=weights)
 
     match optimizer:
 
         case "curve_fit":
             results: tuple[NDArray64, NDArray64] = curve_fit(
                 f=function,
-                xdata=x_data,
-                ydata=y_data,
-                sigma=sigma,
-                absolute_sigma=True,
+                xdata=x_data[mask],
+                ydata=y_data[mask],
+                sigma=sigma[mask],
+                absolute_sigma=False,
                 p0=guess,
                 bounds=(lower, upper),
                 maxfev=maxfev,
