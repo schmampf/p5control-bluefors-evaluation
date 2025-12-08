@@ -38,14 +38,14 @@ def f_of_E(E_meV: np.ndarray, T_K: float) -> np.ndarray:
     return f
 
 
-def N_of_E(E_meV: np.ndarray, Delta_meV: float, Gamma_meV: float) -> np.ndarray:
+def N_of_E(E_meV: np.ndarray, Delta_meV: float, gamma_meV: float) -> np.ndarray:
     """Computes the density of states for a superconductor using the Dynes model."""
     if Delta_meV < 0:
         raise ValueError("Energy gap (eV) must be non-negative.")
-    if Gamma_meV < 0:
+    if gamma_meV < 0:
         raise ValueError("Dynes parameter (eV) must be non-negative.")
 
-    E_complex_meV = np.asarray(E_meV, dtype="complex128") + 1j * Gamma_meV
+    E_complex_meV = np.asarray(E_meV, dtype="complex128") + 1j * gamma_meV
 
     Delta_meV_2 = Delta_meV * Delta_meV
     E_complex_meV_2 = np.multiply(E_complex_meV, E_complex_meV)
@@ -65,8 +65,8 @@ def get_I_nA(
     Delta_meV: float | tuple[float, float] = (0.18, 0.18),
     tau: float = 0.5,
     T_K: float = 0.0,
-    Gamma_meV: float | tuple[float, float] = 0.0,
-    Gamma_meV_min: float = 1e-4,
+    gamma_meV: float | tuple[float, float] = 0.0,
+    gamma_meV_min: float = 1e-4,
 ) -> np.ndarray:
 
     G_N_muS = tau * G_0_muS
@@ -83,18 +83,18 @@ def get_I_nA(
     else:
         raise KeyError("Delta_meV must be float | tuple[float, float]")
 
-    if isinstance(Gamma_meV, float):
-        Gamma1_meV, Gamma2_meV = Gamma_meV, Gamma_meV
-    elif isinstance(Gamma_meV, tuple):
-        Gamma1_meV, Gamma2_meV = Gamma_meV
+    if isinstance(gamma_meV, float):
+        gamma1_meV, gamma2_meV = gamma_meV, gamma_meV
+    elif isinstance(gamma_meV, tuple):
+        gamma1_meV, gamma2_meV = gamma_meV
     else:
-        raise KeyError("Gamma_meV must be float | tuple[float, float]")
+        raise KeyError("gamma_meV must be float | tuple[float, float]")
 
     Delta1_meV_T = Delta_meV_of_T(Delta_meV=Delta1_meV, T_K=T_K)
     Delta2_meV_T = Delta_meV_of_T(Delta_meV=Delta2_meV, T_K=T_K)
 
-    Gamma1_meV = Gamma_meV_min if Gamma1_meV < Gamma_meV_min else Gamma1_meV
-    Gamma2_meV = Gamma_meV_min if Gamma2_meV < Gamma_meV_min else Gamma2_meV
+    gamma1_meV = gamma_meV_min if gamma1_meV < gamma_meV_min else gamma1_meV
+    gamma2_meV = gamma_meV_min if gamma2_meV < gamma_meV_min else gamma2_meV
 
     Delta_meV_T_max = max(Delta1_meV_T, Delta2_meV_T)
     if Delta_meV_T_max == 0.0:
@@ -105,7 +105,7 @@ def get_I_nA(
     V_max_mV = np.max(np.abs(V_mV))
 
     E_max_meV = np.max([Delta_meV_T_max * 10, V_max_mV])
-    dE_meV = np.min([dV_mV, Gamma_meV_min])
+    dE_meV = np.min([dV_mV, gamma_meV_min])
 
     # create V and E axis
     V_mV_temp = np.arange(0.0, V_max_mV + dV_mV, dV_mV, dtype="float64")
@@ -126,7 +126,7 @@ def get_I_nA(
         n1 = N_of_E(
             E_meV=E_meV,
             Delta_meV=Delta1_meV_T,
-            Gamma_meV=Gamma1_meV,
+            gamma_meV=gamma1_meV,
         )
         # Interpolate the shifted DOS
         N1 = np.interp(energy1_eV_mesh, E_meV, n1, left=1.0, right=1.0)
@@ -136,7 +136,7 @@ def get_I_nA(
         n2 = N_of_E(
             E_meV=E_meV,
             Delta_meV=Delta2_meV_T,
-            Gamma_meV=Gamma2_meV,
+            gamma_meV=gamma2_meV,
         )
         N2 = np.interp(energy2_eV_mesh, E_meV, n2, left=1.0, right=1.0)
         integrand *= N2

@@ -7,7 +7,7 @@ from theory.models.constants import V_tol_mV
 from theory.models.constants import tau_tol
 from theory.models.constants import T_tol_K
 from theory.models.constants import Delta_tol_meV
-from theory.models.constants import Gamma_tol_meV
+from theory.models.constants import gamma_tol_meV
 
 NDArray64: TypeAlias = NDArray[np.float64]
 
@@ -59,8 +59,8 @@ def cache_hash(
     T_K: float,
     Delta_1_meV: float,
     Delta_2_meV: float,
-    Gamma_1_meV: float,
-    Gamma_2_meV: float,
+    gamma_1_meV: float,
+    gamma_2_meV: float,
     string: str = "HA",
 ) -> str:
     string += "_"
@@ -70,8 +70,8 @@ def cache_hash(
     string += f"T={T_K:.{T_tol_K}f}K_"
     string += f"Delta=({Delta_1_meV:.{Delta_tol_meV}f},"
     string += f"{Delta_2_meV:.{Delta_tol_meV}f})meV_"
-    string += f"Gamma=({Gamma_1_meV:.{Gamma_tol_meV}f},"
-    string += f"{Gamma_2_meV:.{Gamma_tol_meV}f})meV"
+    string += f"gamma=({gamma_1_meV:.{gamma_tol_meV}f},"
+    string += f"{gamma_2_meV:.{gamma_tol_meV}f})meV"
     return string
 
 
@@ -80,8 +80,8 @@ def cache_hash_pbar(
     T_K: float,
     Delta_1_meV: float,
     Delta_2_meV: float,
-    Gamma_1_meV: float,
-    Gamma_2_meV: float,
+    gamma_1_meV: float,
+    gamma_2_meV: float,
     string: str = "FCS",
 ) -> str:
     string += "_"
@@ -89,6 +89,6 @@ def cache_hash_pbar(
     string += f"T={T_K:.{T_tol_K}f}K_"
     string += f"Delta=({Delta_1_meV:.{Delta_tol_meV}f},"
     string += f"{Delta_2_meV:.{Delta_tol_meV}f})meV_"
-    string += f"Gamma=({Gamma_1_meV:.{Gamma_tol_meV}f},"
-    string += f"{Gamma_2_meV:.{Gamma_tol_meV}f})meV"
+    string += f"gamma=({gamma_1_meV:.{gamma_tol_meV}f},"
+    string += f"{gamma_2_meV:.{gamma_tol_meV}f})meV"
     return string

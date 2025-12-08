@@ -67,9 +67,9 @@ def fermi_distribution(E_meV: Array, T_K: Array) -> Array:
 
 
 @jit
-def density_of_states(E_meV: Array, Delta_meV: Array, Gamma_meV: Array) -> Array:
+def density_of_states(E_meV: Array, Delta_meV: Array, gamma_meV: Array) -> Array:
     # Ensure complex energy
-    E_meV_complex = E_meV + 1j * Gamma_meV
+    E_meV_complex = E_meV + 1j * gamma_meV
 
     # Calculate denominator safely
     N = E_meV_complex / jnp.sqrt(E_meV_complex**2 - Delta_meV**2)
@@ -97,12 +97,12 @@ def current(
     N1 = density_of_states(
         E_meV=E1_meV,
         Delta_meV=Delta_1_meV,
-        Gamma_meV=Gamma_1_meV,
+        gamma_meV=Gamma_1_meV,
     )
     N2 = density_of_states(
         E_meV=E2_meV,
         Delta_meV=Delta_2_meV,
-        Gamma_meV=Gamma_2_meV,
+        gamma_meV=Gamma_2_meV,
     )
     f1 = fermi_distribution(
         E_meV=E1_meV,
@@ -125,7 +125,7 @@ def currents(
     E_meV: Array,
     T_K: float,
     Delta_meV: float,
-    Gamma_meV: float,
+    gamma_meV: float,
 ) -> Array:
     current_vectorized = vmap(
         lambda V_mV: current(
@@ -134,8 +134,8 @@ def currents(
             Delta_1_meV=Delta_meV,
             Delta_2_meV=Delta_meV,
             T_K=T_K,
-            Gamma_1_meV=Gamma_meV,
-            Gamma_2_meV=Gamma_meV,
+            Gamma_1_meV=gamma_meV,
+            Gamma_2_meV=gamma_meV,
         ),
         in_axes=0,
     )
@@ -149,7 +149,7 @@ def current_over_voltage(
     E_meV: Array,
     Delta_meV: Array,
     T_K: Array,
-    Gamma_meV: Array,
+    gamma_meV: Array,
 ) -> Array:
 
     # thermal energy gap
@@ -166,8 +166,8 @@ def current_over_voltage(
             Delta_1_meV=Delta_meV[0],
             Delta_2_meV=Delta_meV[1],
             T_K=T_K,
-            Gamma_1_meV=Gamma_meV[0],
-            Gamma_2_meV=Gamma_meV[1],
+            Gamma_1_meV=gamma_meV[0],
+            Gamma_2_meV=gamma_meV[1],
         ),
         in_axes=0,
     )
@@ -195,7 +195,7 @@ def get_I_nA(
     tau: float = 1.0,
     T_K: float = 0.0,
     Delta_meV: NDArray[np.float64] = np.array([2e-3, 2e-3]),
-    Gamma_meV: NDArray[np.float64] = np.array([1e-4, 1e-4]),
+    gamma_meV: NDArray[np.float64] = np.array([1e-4, 1e-4]),
     Gamma_min_meV: float = 1e-4,
 ) -> NDArray[np.float64]:
 
@@ -206,10 +206,10 @@ def get_I_nA(
 
     # parameter
     Delta_max_meV = np.max(Delta_meV)
-    Gamma_meV = np.where(
-        Gamma_meV < Gamma_min_meV,
+    gamma_meV = np.where(
+        gamma_meV < Gamma_min_meV,
         Gamma_min_meV,
-        Gamma_meV,
+        gamma_meV,
     )
 
     # energy axis
@@ -222,7 +222,7 @@ def get_I_nA(
     E_meV_jax = jnp.arange(-E_max_meV, E_max_meV + dE_meV, dE_meV)
     Delta_meV_jax = jnp.array(Delta_meV)
     T_K_jax = jnp.array(T_K)
-    Gamma_meV_jax = jnp.array(Gamma_meV)
+    gamma_meV_jax = jnp.array(gamma_meV)
 
     # do majix
     I_nA = current_over_voltage(
@@ -231,7 +231,7 @@ def get_I_nA(
         E_meV=E_meV_jax,
         Delta_meV=Delta_meV_jax,
         T_K=T_K_jax,
-        Gamma_meV=Gamma_meV_jax,
+        gamma_meV=gamma_meV_jax,
     )
     I_nA = np.array(I_nA) * tau
 

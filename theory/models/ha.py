@@ -18,7 +18,7 @@ from theory.models.constants import V_tol_mV
 from theory.models.constants import tau_tol
 from theory.models.constants import T_tol_K
 from theory.models.constants import Delta_tol_meV
-from theory.models.constants import Gamma_tol_meV
+from theory.models.constants import gamma_tol_meV
 
 
 WORK_DIR = os.path.join(HOME_DIR, "theory/models/carlosha/")
@@ -35,15 +35,15 @@ def run_ha(
     T_K: float,
     Delta_1_meV: float,
     Delta_2_meV: float,
-    Gamma_1_meV: float,
-    Gamma_2_meV: float,
+    gamma_1_meV: float,
+    gamma_2_meV: float,
 ) -> NDArray[np.float64]:
 
     string = ""
     string += f"{T_K:.{T_tol_K}f}\n"  # K
     string += f"{Delta_1_meV:.{Delta_tol_meV}f} {Delta_2_meV:.{Delta_tol_meV}f}\n"  # mV
     string += f"{tau:.{tau_tol}f}\n"  # [0, 1]
-    string += f"{Gamma_1_meV:.{Gamma_tol_meV}f} {Gamma_2_meV:.{Gamma_tol_meV}f}\n"  # mV
+    string += f"{gamma_1_meV:.{gamma_tol_meV}f} {gamma_2_meV:.{gamma_tol_meV}f}\n"  # mV
     string += f"{Vi_mV:.{V_tol_mV}f} {Vf_mV:.{V_tol_mV}f} {dV_mV:.{V_tol_mV}f} \n"  # mV
 
     proc = subprocess.run(
@@ -73,8 +73,8 @@ def run_multiple_ha(
     T_K: float,
     Delta_1_meV: float,
     Delta_2_meV: float,
-    Gamma_1_meV: float,
-    Gamma_2_meV: float,
+    gamma_1_meV: float,
+    gamma_2_meV: float,
     n_worker: int = 16,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
 
@@ -94,8 +94,8 @@ def run_multiple_ha(
                     T_K=T_K,
                     Delta_1_meV=Delta_1_meV,
                     Delta_2_meV=Delta_2_meV,
-                    Gamma_1_meV=Gamma_1_meV,
-                    Gamma_2_meV=Gamma_2_meV,
+                    gamma_1_meV=gamma_1_meV,
+                    gamma_2_meV=gamma_2_meV,
                 )
             )
 
@@ -115,7 +115,7 @@ def get_I_nA(
     tau: float = 0.5,
     T_K: float = 0.0,
     Delta_meV: NDArray[np.float64] = np.array([2e-3, 2e-3]),
-    Gamma_meV: NDArray[np.float64] = np.array([1e-4, 1e-4]),
+    gamma_meV: NDArray[np.float64] = np.array([1e-4, 1e-4]),
     n_worker: int = 16,
 ) -> NDArray[np.float64]:
 
@@ -126,7 +126,7 @@ def get_I_nA(
     tau = np.round(tau, decimals=tau_tol)
     T_K = np.round(T_K, decimals=T_tol_K)
     Delta_meV = np.round(Delta_meV, decimals=Delta_tol_meV)
-    Gamma_meV = np.round(Gamma_meV, decimals=Gamma_tol_meV)
+    gamma_meV = np.round(gamma_meV, decimals=gamma_tol_meV)
 
     # voltage axis
     V_0_mV = V_mV
@@ -140,8 +140,8 @@ def get_I_nA(
         T_K=T_K,
         Delta_1_meV=Delta_meV[0],
         Delta_2_meV=Delta_meV[1],
-        Gamma_1_meV=Gamma_meV[0],
-        Gamma_2_meV=Gamma_meV[1],
+        gamma_1_meV=gamma_meV[0],
+        gamma_2_meV=gamma_meV[1],
         string="HA",
     )
     cached_file = os.path.join(CACHE_DIR, f"{cache_key}.npz")
@@ -158,8 +158,8 @@ def get_I_nA(
             T_K=T_K,
             Delta_1_meV=Delta_meV[0],
             Delta_2_meV=Delta_meV[1],
-            Gamma_1_meV=Gamma_meV[0],
-            Gamma_2_meV=Gamma_meV[1],
+            gamma_1_meV=gamma_meV[0],
+            gamma_2_meV=gamma_meV[1],
             n_worker=n_worker,
         )
 
@@ -172,8 +172,8 @@ def get_I_nA(
             T_K=T_K,
             Delta_1_meV=Delta_meV[0],
             Delta_2_meV=Delta_meV[1],
-            Gamma_1_meV=Gamma_meV[0],
-            Gamma_2_meV=Gamma_meV[1],
+            gamma_1_meV=gamma_meV[0],
+            gamma_2_meV=gamma_meV[1],
         )
 
     # make symmetric
