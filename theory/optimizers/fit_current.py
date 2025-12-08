@@ -7,19 +7,18 @@ import sys
 from typing import Optional, Callable, TypeAlias, TypedDict
 
 import numpy as np
-from numpy.typing import NDArray, ArrayLike
+from numpy.typing import NDArray
 
-from theory.optimizers.models import models
+from theory.optimizers.models import get_model
 from theory.optimizers.optimizers import optimizers
+
+from models import NDArray64, ModelFunction, ModelType
+
+ParameterType: TypeAlias = tuple[float, tuple[float, float], bool]
+DictType: TypeAlias = dict[str, float | NDArray[np.float64 | np.bool] | str | None]
 
 importlib.reload(sys.modules["theory.optimizers.models"])
 importlib.reload(sys.modules["theory.optimizers.optimizers"])
-
-NDArray64: TypeAlias = NDArray[np.float64]
-ParameterType: TypeAlias = tuple[float, tuple[float, float], bool]
-DictType: TypeAlias = dict[str, float | NDArray[np.float64 | np.bool] | str | None]
-ModelFunction: TypeAlias = Callable[..., ArrayLike]
-ModelType: TypeAlias = tuple[ModelFunction, NDArray[np.bool]]
 
 
 class SolutionDict(TypedDict):
@@ -37,29 +36,34 @@ class SolutionDict(TypedDict):
     pcov: NDArray64
     perr: NDArray64
     E_mV: Optional[NDArray64]
-    sigma: Optional[NDArray64]
+    weights: Optional[NDArray64]
     maxfev: Optional[int]
-    tau: float
+    tau: list[float]
+    G_N: float
     T_K: float
-    Delta_mV: float
-    Gamma_mV: float
+    Delta_meV: float
+    gamma_meV: float
     A_mV: float
     nu_GHz: float
 
 
-def fit_current(
+def fit_I_nA(
     V_mV: NDArray64,
     I_nA: NDArray64,
-    tau: ParameterType = (1.0, (0, 10.0), False),
+    tau: list[ParameterType] = [
+        (0.5, (0.0, 1.0), False),
+        (0.1, (0.0, 1.0), False),
+    ],
+    G_N: ParameterType = (1.0, (0, 10.0), False),
     T_K: ParameterType = (0.2, (0, 1.5), False),
-    Delta_mV: ParameterType = (0.195, (0.18, 0.21), False),
-    Gamma_mV: ParameterType = (1e-3, (1e-3, 25e-3), False),
+    Delta_meV: ParameterType = (0.195, (0.18, 0.21), False),
+    gamma_meV: ParameterType = (1e-3, (1e-3, 25e-3), False),
     A_mV: ParameterType = (1.0, (0, 10.0), False),
     nu_GHz: ParameterType = (7.8, (1.0, 20.0), False),
     E_mV: Optional[NDArray64] = None,
-    sigma: Optional[NDArray64] = None,
-    model: str = "dynes",
-    optimizer: str = "curve_fit_jax",
+    weights: Optional[NDArray64] = None,
+    model: str = "bcs",
+    optimizer: str = "curve_fit",
     maxfev: Optional[int] = None,
 ) -> SolutionDict:
     """
@@ -67,19 +71,19 @@ def fit_current(
     """
 
     # Define Parameter
-    tau_0, (tau_lower, tau_upper), tau_fixed = tau
+    G_N_0, (G_N_lower, G_N_upper), G_N_fixed = G_N
     T_K_0, (T_K_lower, T_K_upper), T_K_fixed = T_K
-    Delta_mV_0, (Delta_mV_lower, Delta_mV_upper), Delta_mV_fixed = Delta_mV
-    Gamma_mV_0, (Gamma_mV_lower, Gamma_mV_upper), Gamma_mV_fixed = Gamma_mV
+    Delta_meV_0, (Delta_meV_lower, Delta_meV_upper), Delta_meV_fixed = Delta_meV
+    gamma_meV_0, (gamma_meV_lower, gamma_meV_upper), gamma_meV_fixed = gamma_meV
     A_mV_0, (A_mV_lower, A_mV_upper), A_mV_fixed = A_mV
     nu_GHz_0, (nu_GHz_lower, nu_GHz_upper), nu_GHz_fixed = nu_GHz
 
     guess_full: NDArray64 = np.array(
         [
-            tau_0,
+            G_N_0,
             T_K_0,
-            Delta_mV_0,
-            Gamma_mV_0,
+            Delta_meV_0,
+            gamma_meV_0,
             A_mV_0,
             nu_GHz_0,
         ],
@@ -88,10 +92,10 @@ def fit_current(
 
     lower_full: NDArray64 = np.array(
         [
-            tau_lower,
+            G_N_lower,
             T_K_lower,
-            Delta_mV_lower,
-            Gamma_mV_lower,
+            Delta_meV_lower,
+            gamma_meV_lower,
             A_mV_lower,
             nu_GHz_lower,
         ],
@@ -100,10 +104,10 @@ def fit_current(
 
     upper_full: NDArray64 = np.array(
         [
-            tau_upper,
+            G_N_upper,
             T_K_upper,
-            Delta_mV_upper,
-            Gamma_mV_upper,
+            Delta_meV_upper,
+            gamma_meV_upper,
             A_mV_upper,
             nu_GHz_upper,
         ],
@@ -112,10 +116,10 @@ def fit_current(
 
     fixed: NDArray[np.bool] = np.array(
         [
-            tau_fixed,
+            G_N_fixed,
             T_K_fixed,
-            Delta_mV_fixed,
-            Gamma_mV_fixed,
+            Delta_meV_fixed,
+            gamma_meV_fixed,
             A_mV_fixed,
             nu_GHz_fixed,
         ],
@@ -123,7 +127,7 @@ def fit_current(
     )
 
     # get model
-    chosen_model: ModelType = models(model=model, E_mV=E_mV)
+    chosen_model: ModelType = get_model(model=model, E_mV=E_mV)
     function: ModelFunction = chosen_model[0]
     parameter_mask: NDArray[np.bool] = chosen_model[1]
 
@@ -133,7 +137,7 @@ def fit_current(
     lower = lower_full[free_mask]
     upper = upper_full[free_mask]
 
-    def fixed_function(V_mV: NDArray64, *free_params: tuple[float, ...]) -> ArrayLike:
+    def fixed_function(V_mV: NDArray64, *free_params: tuple[float, ...]) -> NDArray64:
         full_params = guess_full.copy()
         full_params[free_mask] = free_params
         return function(V_mV, *full_params[parameter_mask])
@@ -144,7 +148,7 @@ def fit_current(
         function=fixed_function,
         x_data=V_mV,
         y_data=I_nA,
-        sigma=sigma,
+        weights=weights,
         guess=guess,
         lower=lower,
         upper=upper,
@@ -183,12 +187,13 @@ def fit_current(
         "pcov": pcov_full,
         "perr": perr_full,
         "E_mV": E_mV,
-        "sigma": sigma,
+        "weights": weights,
         "maxfev": maxfev,
-        "tau": popt_full[0],
+        "tau": list(popt_full[6:]),
+        "G_N": popt_full[0],
         "T_K": popt_full[1],
-        "Delta_mV": popt_full[2],
-        "Gamma_mV": popt_full[3],
+        "Delta_meV": popt_full[2],
+        "gamma_meV": popt_full[3],
         "A_mV": popt_full[4],
         "nu_GHz": popt_full[5],
     }
