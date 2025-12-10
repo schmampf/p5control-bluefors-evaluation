@@ -114,13 +114,29 @@ def get_I_nA(
     V_mV: NDArray[np.float64],
     tau: float = 0.5,
     T_K: float = 0.0,
-    Delta_meV: NDArray[np.float64] = np.array([2e-3, 2e-3]),
-    gamma_meV: NDArray[np.float64] = np.array([1e-4, 1e-4]),
+    Delta_meV: float | tuple[float, float] = (0.18, 0.18),
+    gamma_meV: float | tuple[float, float] = 0.0,
     n_worker: int = 16,
 ) -> NDArray[np.float64]:
 
     if tau == 0.0:
         return np.zeros_like(V_mV)
+
+    if isinstance(Delta_meV, float):
+        Delta_meV_tuple: tuple[float, float] = Delta_meV, Delta_meV
+    elif isinstance(Delta_meV, tuple):
+        Delta_meV_tuple: tuple[float, float] = Delta_meV
+    else:
+        raise KeyError("Delta_meV must be float | tuple[float, float]")
+    Delta_meV: NDArray[np.float64] = np.array(Delta_meV_tuple, dtype="float64")
+
+    if isinstance(gamma_meV, float):
+        gamma_meV_tuple: tuple[float, float] = gamma_meV, gamma_meV
+    elif isinstance(gamma_meV, tuple):
+        gamma_meV_tuple: tuple[float, float] = gamma_meV
+    else:
+        raise KeyError("gamma_meV must be float | tuple[float, float]")
+    gamma_meV: NDArray[np.float64] = np.array(gamma_meV_tuple, dtype="float64")
 
     V_mV = np.round(V_mV, decimals=V_tol_mV)
     tau = np.round(tau, decimals=tau_tol)
