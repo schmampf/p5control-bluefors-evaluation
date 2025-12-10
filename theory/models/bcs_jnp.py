@@ -88,8 +88,8 @@ def current(
     Delta_1_meV: Array,
     Delta_2_meV: Array,
     T_K: Array,
-    Gamma_1_meV: Array,
-    Gamma_2_meV: Array,
+    gamma_1_meV: Array,
+    gamma_2_meV: Array,
 ) -> Array:
     V_mV_over_2 = V_meV / 2
     E1_meV = E_meV - V_mV_over_2
@@ -97,12 +97,12 @@ def current(
     N1 = density_of_states(
         E_meV=E1_meV,
         Delta_meV=Delta_1_meV,
-        gamma_meV=Gamma_1_meV,
+        gamma_meV=gamma_1_meV,
     )
     N2 = density_of_states(
         E_meV=E2_meV,
         Delta_meV=Delta_2_meV,
-        gamma_meV=Gamma_2_meV,
+        gamma_meV=gamma_2_meV,
     )
     f1 = fermi_distribution(
         E_meV=E1_meV,
@@ -134,8 +134,8 @@ def currents(
             Delta_1_meV=Delta_meV,
             Delta_2_meV=Delta_meV,
             T_K=T_K,
-            Gamma_1_meV=gamma_meV,
-            Gamma_2_meV=gamma_meV,
+            gamma_1_meV=gamma_meV,
+            gamma_2_meV=gamma_meV,
         ),
         in_axes=0,
     )
@@ -156,7 +156,7 @@ def current_over_voltage(
     Delta_meV = thermal_energy_gap(Delta_meV=Delta_meV, T_K=T_K)
 
     # Delta_eV = jnp.atleast_1d(Delta_eV)
-    # Gamma_eV = jnp.atleast_1d(Gamma_eV)
+    # gamma_eV = jnp.atleast_1d(gamma_eV)
 
     # vectorized current function (over V)
     current_vectorized = vmap(
@@ -166,8 +166,8 @@ def current_over_voltage(
             Delta_1_meV=Delta_meV[0],
             Delta_2_meV=Delta_meV[1],
             T_K=T_K,
-            Gamma_1_meV=gamma_meV[0],
-            Gamma_2_meV=gamma_meV[1],
+            gamma_1_meV=gamma_meV[0],
+            gamma_2_meV=gamma_meV[1],
         ),
         in_axes=0,
     )
@@ -192,12 +192,27 @@ def current_over_voltage(
 
 def get_I_nA(
     V_mV: NDArray[np.float64],
-    tau: float = 1.0,
+    G_N: float = 1.0,
     T_K: float = 0.0,
-    Delta_meV: NDArray[np.float64] = np.array([2e-3, 2e-3]),
-    gamma_meV: NDArray[np.float64] = np.array([1e-4, 1e-4]),
-    Gamma_min_meV: float = 1e-4,
+    Delta_meV: float | tuple[float, float] = (0.18, 0.18),
+    gamma_meV: float | tuple[float, float] = 0.0,
+    gamma_min_meV: float = 1e-4,
 ) -> NDArray[np.float64]:
+
+    if isinstance(Delta_meV, float):
+        Delta_meV: tuple[float, float] = Delta_meV, Delta_meV
+    elif isinstance(Delta_meV, tuple):
+        Delta_meV: tuple[float, float] = Delta_meV
+    else:
+        raise KeyError("Delta_meV must be float | tuple[float, float]")
+
+    if isinstance(gamma_meV, float):
+        gamma_meV_tuple: tuple[float, float] = gamma_meV, gamma_meV
+    elif isinstance(gamma_meV, tuple):
+        gamma_meV_tuple: tuple[float, float] = gamma_meV
+    else:
+        raise KeyError("gamma_meV must be float | tuple[float, float]")
+    gamma_meV: NDArray[np.float64] = np.array(gamma_meV_tuple, dtype="float64")
 
     V_0_mV = V_mV
     # voltage axis
@@ -207,14 +222,14 @@ def get_I_nA(
     # parameter
     Delta_max_meV = np.max(Delta_meV)
     gamma_meV = np.where(
-        gamma_meV < Gamma_min_meV,
-        Gamma_min_meV,
+        gamma_meV < gamma_min_meV,
+        gamma_min_meV,
         gamma_meV,
     )
 
     # energy axis
     E_max_meV = np.max([Delta_max_meV * 10, V_max_meV])
-    dE_meV = np.min([dV_meV, Gamma_min_meV])
+    dE_meV = np.min([dV_meV, gamma_min_meV])
 
     # initialize jax.numpy
     V_meV_jax = jnp.arange(0.0, V_max_meV + dV_meV, dV_meV)
@@ -233,6 +248,6 @@ def get_I_nA(
         T_K=T_K_jax,
         gamma_meV=gamma_meV_jax,
     )
-    I_nA = np.array(I_nA) * tau
+    I_nA = np.array(I_nA) * G_N
 
     return I_nA
