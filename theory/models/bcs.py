@@ -3,10 +3,12 @@ import sys
 
 sys.path.append("/Users/oliver/Documents/p5control-bluefors-evaluation")
 
-from theory.models.constants import k_B_meV
-from theory.models.constants import G_0_muS
+from theory.utilities.constants import k_B_meV
+from theory.utilities.constants import G_0_muS
 
-from theory.models.functions import bin_y_over_x
+from theory.utilities.functions import bin_y_over_x
+
+from theory.utilities.types import NDArray64
 
 
 def Delta_meV_of_T(Delta_meV: float, T_K: float) -> float:
@@ -25,7 +27,7 @@ def Delta_meV_of_T(Delta_meV: float, T_K: float) -> float:
         return Delta_meV * np.tanh(1.74 * np.sqrt(T_C_K / T_K - 1))
 
 
-def f_of_E(E_meV: np.ndarray, T_K: float) -> np.ndarray:
+def f_of_E(E_meV: NDArray64, T_K: float) -> NDArray64:
     """Fermi-Dirac distribution at zero and finite temperature."""
     if T_K < 0:
         raise ValueError("Temperature (K) must be non-negative.")
@@ -38,7 +40,7 @@ def f_of_E(E_meV: np.ndarray, T_K: float) -> np.ndarray:
     return f
 
 
-def N_of_E(E_meV: np.ndarray, Delta_meV: float, gamma_meV: float) -> np.ndarray:
+def N_of_E(E_meV: NDArray64, Delta_meV: float, gamma_meV: float) -> NDArray64:
     """Computes the density of states for a superconductor using the Dynes model."""
     if Delta_meV < 0:
         raise ValueError("Energy gap (eV) must be non-negative.")
@@ -61,13 +63,13 @@ def N_of_E(E_meV: np.ndarray, Delta_meV: float, gamma_meV: float) -> np.ndarray:
 
 
 def get_I_nA(
-    V_mV: np.ndarray,
+    V_mV: NDArray64,
     Delta_meV: float | tuple[float, float] = (0.18, 0.18),
     G_N: float = 0.5,
     T_K: float = 0.0,
     gamma_meV: float | tuple[float, float] = 0.0,
     gamma_meV_min: float = 1e-4,
-) -> np.ndarray:
+) -> NDArray64:
 
     G_N_muS = G_N * G_0_muS
 

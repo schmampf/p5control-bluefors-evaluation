@@ -1,12 +1,16 @@
 import numpy as np
-from numpy.typing import NDArray
 
 import jax
 import jax.numpy as jnp
 from jax import vmap, jit, lax, Array
 
-from .constants import k_B_meV
-from .constants import G_0_muS
+from theory.utilities.types import NDArray64
+
+from theory.utilities.functions_jax import bin_y_over_x
+
+from theory.utilities.constants import k_B_meV
+from theory.utilities.constants import G_0_muS
+
 
 k_B_meV_jax: Array = jnp.array(k_B_meV)
 G_0_muS_jax: Array = jnp.array(G_0_muS)
@@ -16,28 +20,6 @@ const174: Array = jnp.array(1.74)
 
 
 jax.config.update("jax_enable_x64", True)
-
-
-@jit
-def bin_y_over_x(
-    x: Array,
-    y: Array,
-    x_bins: Array,
-) -> Array:
-
-    # Extend bin edges for histogram: shift by half a bin width for center alignment
-    x_nu = jnp.append(x_bins, 2 * x_bins[-1] - x_bins[-2])  # Add one final edge
-    x_nu = x_nu - (x_nu[1] - x_nu[0]) / 2
-
-    # Count how many x-values fall into each bin
-    _count, _ = jnp.histogram(x, bins=x_nu, weights=None)
-    _count = jnp.where(_count == 0, jnp.nan, _count)
-
-    # Sum of y-values in each bin
-    _sum, _ = jnp.histogram(x, bins=x_nu, weights=y)
-
-    # Return mean y per bin and count
-    return _sum / _count
 
 
 @jit
@@ -191,13 +173,13 @@ def current_over_voltage(
 
 
 def get_I_nA(
-    V_mV: NDArray[np.float64],
+    V_mV: NDArray64,
     G_N: float = 1.0,
     T_K: float = 0.0,
     Delta_meV: float | tuple[float, float] = (0.18, 0.18),
     gamma_meV: float | tuple[float, float] = 0.0,
     gamma_min_meV: float = 1e-4,
-) -> NDArray[np.float64]:
+) -> NDArray64:
 
     if isinstance(Delta_meV, float):
         Delta_meV: tuple[float, float] = Delta_meV, Delta_meV
@@ -212,7 +194,7 @@ def get_I_nA(
         gamma_meV_tuple: tuple[float, float] = gamma_meV
     else:
         raise KeyError("gamma_meV must be float | tuple[float, float]")
-    gamma_meV: NDArray[np.float64] = np.array(gamma_meV_tuple, dtype="float64")
+    gamma_meV: NDArray64 = np.array(gamma_meV_tuple, dtype="float64")
 
     V_0_mV = V_mV
     # voltage axis

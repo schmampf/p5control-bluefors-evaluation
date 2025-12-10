@@ -1,11 +1,12 @@
 import numpy as np
-from numpy.typing import NDArray
 
-from .constants import G_0_muS
+from theory.utilities.types import NDArray64
 
-from .functions import bin_y_over_x
+from theory.utilities.functions import bin_y_over_x
 
-from .bcs import Delta_meV_of_T, f_of_E
+from theory.utilities.constants import G_0_muS
+
+from theory.models.bcs import Delta_meV_of_T, f_of_E
 
 
 def Z_of_tau(tau: float) -> float:
@@ -13,15 +14,15 @@ def Z_of_tau(tau: float) -> float:
 
 
 def AB_of_E(
-    E_meV: NDArray[np.float64],
+    E_meV: NDArray64,
     Delta_meV: float,
     Z: float,
-    Gamma_meV: float,
+    gamma_meV: float,
 ) -> tuple[
-    NDArray[np.float64],
-    NDArray[np.float64],
+    NDArray64,
+    NDArray64,
 ]:
-    E_meV = np.array(np.abs(E_meV) + 1j * Gamma_meV, dtype="complex128")
+    E_meV = np.array(np.abs(E_meV) + 1j * gamma_meV, dtype="complex128")
     E_meV += 1e-300  # avoid runtime warning
     u2 = 0.5 * (1 + np.sqrt(E_meV**2 - Delta_meV**2) / E_meV)
     v2 = 1 - u2
@@ -48,13 +49,13 @@ def AB_of_E(
 
 
 def get_I_nA(
-    V_mV: np.ndarray,
+    V_mV: NDArray64,
     Delta_meV: float = 0.18,
     tau: float = 0.5,
     T_K: float = 0.0,
-    Gamma_meV: float = 0.0,
-    Gamma_meV_min: float = 1e-4,
-) -> np.ndarray:
+    gamma_meV: float = 0.0,
+    gamma_meV_min: float = 1e-4,
+) -> NDArray64:
 
     G_N_muS = tau * G_0_muS
     I_NN_nA = V_mV * G_N_muS
@@ -64,14 +65,14 @@ def get_I_nA(
     if Delta_meV_T == 0.0:
         return np.vstack((I_NN_nA, I_NN_nA, np.zeros_like(I_NN_nA)))
 
-    Gamma_meV = Gamma_meV_min if Gamma_meV < Gamma_meV_min else Gamma_meV
+    gamma_meV = gamma_meV_min if gamma_meV < gamma_meV_min else gamma_meV
 
     # Determine stepsize in V and E
     dV_mV = np.abs(np.nanmax(V_mV) - np.nanmin(V_mV)) / (len(V_mV) - 1)
     V_max_mV = np.max(np.abs(V_mV))
 
     E_max_meV = np.max([Delta_meV_T * 10, V_max_mV])
-    dE_meV = np.min([dV_mV, Gamma_meV_min])
+    dE_meV = np.min([dV_mV, gamma_meV_min])
 
     # create V and E axis
     V_mV_temp = np.arange(0.0, V_max_mV + dV_mV, dV_mV, dtype="float64")
@@ -83,7 +84,7 @@ def get_I_nA(
         E_meV=E_meV,
         Delta_meV=Delta_meV_T,
         Z=Z,
-        Gamma_meV=Gamma_meV,
+        gamma_meV=gamma_meV,
     )
 
     I_2e_mV = np.empty_like(V_mV_temp)

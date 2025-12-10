@@ -4,24 +4,25 @@ import os
 import subprocess
 import sys
 
-from numpy.typing import NDArray
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import as_completed
 
 
-from .functions import cache_hash
-from .functions import bin_y_over_x
+from theory.utilities.types import NDArray64
 
-from .constants import V_tol_mV
-from .constants import tau_tol
-from .constants import T_tol_K
-from .constants import Delta_tol_meV
-from .constants import Gamma_tol_meV
+from theory.utilities.functions import cache_hash
+from theory.utilities.functions import bin_y_over_x
+
+from theory.utilities.constants import V_tol_mV
+from theory.utilities.constants import tau_tol
+from theory.utilities.constants import T_tol_K
+from theory.utilities.constants import Delta_tol_meV
+from theory.utilities.constants import gamma_tol_meV
 
 # number of maximum charges
-from .constants import m_max
-from .constants import iw
-from .constants import nchi
+from theory.utilities.constants import m_max
+from theory.utilities.constants import iw
+from theory.utilities.constants import nchi
 
 HOME_DIR = "/Users/oliver/Documents/p5control-bluefors-evaluation"
 sys.path.append(HOME_DIR)
@@ -39,15 +40,15 @@ def run_fcs(
     T_K: float,
     Delta_1_meV: float,
     Delta_2_meV: float,
-    Gamma_1_meV: float,
-    Gamma_2_meV: float,
-) -> NDArray[np.float64]:
+    gamma_1_meV: float,
+    gamma_2_meV: float,
+) -> NDArray64:
 
     string = ""
     string += f"{tau:.{tau_tol}f}\n"  # [0, 1]
     string += f"{T_K:.{T_tol_K}f}\n"  # K
     string += f"{Delta_1_meV:.{Delta_tol_meV}f} {Delta_2_meV:.{Delta_tol_meV}f}\n"  # mV
-    string += f"{Gamma_1_meV:.{Gamma_tol_meV}f} {Gamma_2_meV:.{Gamma_tol_meV}f}\n"  # mV
+    string += f"{gamma_1_meV:.{gamma_tol_meV}f} {gamma_2_meV:.{gamma_tol_meV}f}\n"  # mV
     string += f"{Vi_mV:.{V_tol_mV}f} {Vf_mV:.{V_tol_mV}f} {dV_mV:.{V_tol_mV}f} \n"  # mV
     string += f"{m_max} {iw} {nchi}"
 
@@ -79,10 +80,10 @@ def run_multiple_fcs(
     T_K: float,
     Delta_1_meV: float,
     Delta_2_meV: float,
-    Gamma_1_meV: float,
-    Gamma_2_meV: float,
+    gamma_1_meV: float,
+    gamma_2_meV: float,
     n_worker: int = 16,
-) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+) -> tuple[NDArray64, NDArray64]:
 
     chunk = int(np.ceil((V_max_mV / dV_mV + 1) / n_worker))
     with ThreadPoolExecutor(max_workers=n_worker) as executor:
@@ -100,8 +101,8 @@ def run_multiple_fcs(
                     T_K=T_K,
                     Delta_1_meV=Delta_1_meV,
                     Delta_2_meV=Delta_2_meV,
-                    Gamma_1_meV=Gamma_1_meV,
-                    Gamma_2_meV=Gamma_2_meV,
+                    gamma_1_meV=gamma_1_meV,
+                    gamma_2_meV=gamma_2_meV,
                 )
             )
 
@@ -117,22 +118,40 @@ def run_multiple_fcs(
 
 
 def get_I_nA(
-    V_mV: NDArray[np.float64],
+    V_mV: NDArray64,
     tau: float = 0.5,
     T_K: float = 0.0,
-    Delta_meV: NDArray[np.float64] = np.array([2e-3, 2e-3]),
-    Gamma_meV: NDArray[np.float64] = np.array([1e-4, 1e-4]),
+    Delta_meV: float | tuple[float, float] = (0.18, 0.18),
+    gamma_meV: float | tuple[float, float] = 0.0,
+    gamma_meV_min: float = 1e-4,
     n_worker: int = 16,
-) -> NDArray[np.float64]:
+) -> NDArray64:
 
     if tau == 0.0:
         return np.zeros((V_mV.shape[0], m_max + 1))
+
+    if isinstance(Delta_meV, float):
+        Delta_meV_tuple: tuple[float, float] = Delta_meV, Delta_meV
+    elif isinstance(Delta_meV, tuple):
+        Delta_meV_tuple: tuple[float, float] = Delta_meV
+    else:
+        raise KeyError("Delta_meV must be float | tuple[float, float]")
+    Delta_meV: NDArray64 = np.array(Delta_meV_tuple, dtype="float64")
+
+    if isinstance(gamma_meV, float):
+        gamma_meV_tuple: tuple[float, float] = gamma_meV, gamma_meV
+    elif isinstance(gamma_meV, tuple):
+        gamma_meV_tuple: tuple[float, float] = gamma_meV
+    else:
+        raise KeyError("gamma_meV must be float | tuple[float, float]")
+    gamma_meV: NDArray64 = np.array(gamma_meV_tuple, dtype="float64")
+    gamma_meV = np.where(gamma_meV > gamma_meV_min, gamma_meV, gamma_meV_min)
 
     V_mV = np.round(V_mV, decimals=V_tol_mV)
     tau = np.round(tau, decimals=tau_tol)
     T_K = np.round(T_K, decimals=T_tol_K)
     Delta_meV = np.round(Delta_meV, decimals=Delta_tol_meV)
-    Gamma_meV = np.round(Gamma_meV, decimals=Gamma_tol_meV)
+    gamma_meV = np.round(gamma_meV, decimals=gamma_tol_meV)
 
     # voltage axis
     V_0_mV = V_mV
@@ -146,8 +165,8 @@ def get_I_nA(
         T_K=T_K,
         Delta_1_meV=Delta_meV[0],
         Delta_2_meV=Delta_meV[1],
-        Gamma_1_meV=Gamma_meV[0],
-        Gamma_2_meV=Gamma_meV[1],
+        gamma_1_meV=gamma_meV[0],
+        gamma_2_meV=gamma_meV[1],
         string="FCS",
     )
     cached_file = os.path.join(CACHE_DIR, f"{cache_key}.npz")
@@ -164,8 +183,8 @@ def get_I_nA(
             T_K=T_K,
             Delta_1_meV=Delta_meV[0],
             Delta_2_meV=Delta_meV[1],
-            Gamma_1_meV=Gamma_meV[0],
-            Gamma_2_meV=Gamma_meV[1],
+            gamma_1_meV=gamma_meV[0],
+            gamma_2_meV=gamma_meV[1],
             n_worker=n_worker,
         )
 
@@ -178,8 +197,8 @@ def get_I_nA(
             T_K=T_K,
             Delta_1_meV=Delta_meV[0],
             Delta_2_meV=Delta_meV[1],
-            Gamma_1_meV=Gamma_meV[0],
-            Gamma_2_meV=Gamma_meV[1],
+            gamma_1_meV=gamma_meV[0],
+            gamma_2_meV=gamma_meV[1],
         )
 
     # make symmetric

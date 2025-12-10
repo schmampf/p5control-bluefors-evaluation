@@ -4,21 +4,22 @@ import os
 import subprocess
 import sys
 
-from numpy.typing import NDArray
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import as_completed
 
 HOME_DIR = "/Users/oliver/Documents/p5control-bluefors-evaluation"
 sys.path.append(HOME_DIR)
 
-from theory.models.functions import cache_hash
-from theory.models.functions import bin_y_over_x
+from theory.utilities.types import NDArray64
 
-from theory.models.constants import V_tol_mV
-from theory.models.constants import tau_tol
-from theory.models.constants import T_tol_K
-from theory.models.constants import Delta_tol_meV
-from theory.models.constants import gamma_tol_meV
+from theory.utilities.functions import cache_hash
+from theory.utilities.functions import bin_y_over_x
+
+from theory.utilities.constants import V_tol_mV
+from theory.utilities.constants import tau_tol
+from theory.utilities.constants import T_tol_K
+from theory.utilities.constants import Delta_tol_meV
+from theory.utilities.constants import gamma_tol_meV
 
 
 WORK_DIR = os.path.join(HOME_DIR, "theory/models/carlosha/")
@@ -37,7 +38,7 @@ def run_ha(
     Delta_2_meV: float,
     gamma_1_meV: float,
     gamma_2_meV: float,
-) -> NDArray[np.float64]:
+) -> NDArray64:
 
     string = ""
     string += f"{T_K:.{T_tol_K}f}\n"  # K
@@ -76,7 +77,7 @@ def run_multiple_ha(
     gamma_1_meV: float,
     gamma_2_meV: float,
     n_worker: int = 16,
-) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+) -> tuple[NDArray64, NDArray64]:
 
     chunk = int(np.ceil((V_max_mV / dV_mV + 1) / n_worker))
     with ThreadPoolExecutor(max_workers=n_worker) as executor:
@@ -111,13 +112,14 @@ def run_multiple_ha(
 
 
 def get_I_nA(
-    V_mV: NDArray[np.float64],
+    V_mV: NDArray64,
     tau: float = 0.5,
     T_K: float = 0.0,
     Delta_meV: float | tuple[float, float] = (0.18, 0.18),
     gamma_meV: float | tuple[float, float] = 0.0,
+    gamma_meV_min: float = 1e-4,
     n_worker: int = 16,
-) -> NDArray[np.float64]:
+) -> NDArray64:
 
     if tau == 0.0:
         return np.zeros_like(V_mV)
@@ -128,7 +130,7 @@ def get_I_nA(
         Delta_meV_tuple: tuple[float, float] = Delta_meV
     else:
         raise KeyError("Delta_meV must be float | tuple[float, float]")
-    Delta_meV: NDArray[np.float64] = np.array(Delta_meV_tuple, dtype="float64")
+    Delta_meV: NDArray64 = np.array(Delta_meV_tuple, dtype="float64")
 
     if isinstance(gamma_meV, float):
         gamma_meV_tuple: tuple[float, float] = gamma_meV, gamma_meV
@@ -136,7 +138,8 @@ def get_I_nA(
         gamma_meV_tuple: tuple[float, float] = gamma_meV
     else:
         raise KeyError("gamma_meV must be float | tuple[float, float]")
-    gamma_meV: NDArray[np.float64] = np.array(gamma_meV_tuple, dtype="float64")
+    gamma_meV: NDArray64 = np.array(gamma_meV_tuple, dtype="float64")
+    gamma_meV = np.where(gamma_meV > gamma_meV_min, gamma_meV, gamma_meV_min)
 
     V_mV = np.round(V_mV, decimals=V_tol_mV)
     tau = np.round(tau, decimals=tau_tol)

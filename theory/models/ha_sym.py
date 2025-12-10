@@ -1,28 +1,28 @@
-import io
 import numpy as np
 import os
-import subprocess
 import sys
 
 from numpy.typing import NDArray
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import as_completed
 
-
 import theory.models.carlosha.ha_sym as ha_sym
 
 from theory.models.bcs import Delta_meV_of_T
 
-from theory.models.functions import cache_hash_sym
-from theory.models.functions import bin_y_over_x
+from theory.utilities.types import NDArray64
 
-from theory.models.constants import G_0_muS
-from theory.models.constants import k_B_meV
-from theory.models.constants import V_tol_mV
-from theory.models.constants import tau_tol
-from theory.models.constants import T_tol_K
-from theory.models.constants import Delta_tol_meV
-from theory.models.constants import gamma_tol_meV
+from theory.utilities.functions import cache_hash_sym
+from theory.utilities.functions import bin_y_over_x
+
+from theory.utilities.constants import G_0_muS
+from theory.utilities.constants import k_B_meV
+
+from theory.utilities.constants import V_tol_mV
+from theory.utilities.constants import tau_tol
+from theory.utilities.constants import T_tol_K
+from theory.utilities.constants import Delta_tol_meV
+from theory.utilities.constants import gamma_tol_meV
 
 HOME_DIR = "/Users/oliver/Documents/p5control-bluefors-evaluation"
 sys.path.append(HOME_DIR)
@@ -33,12 +33,12 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 
 
 def run_ha_sym(
-    V_mV: NDArray[np.float64],
+    V_mV: NDArray64,
     tau: float,
     T_K: float,
     Delta_meV: float,
     gamma_meV: float,
-) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+) -> tuple[NDArray64, NDArray64]:
 
     Delta_T_meV = Delta_meV_of_T(Delta_meV, T_K)
     T_Delta = k_B_meV * T_K / Delta_T_meV
@@ -68,13 +68,13 @@ def run_ha_sym(
 
 
 def run_multiple_ha_sym(
-    V_mV: NDArray[np.float64],
+    V_mV: NDArray64,
     tau: float,
     T_K: float,
     Delta_meV: float,
     gamma_meV: float,
     n_worker: int = 16,
-) -> NDArray[np.float64]:
+) -> NDArray64:
 
     V_chunks = np.array_split(V_mV, n_worker)
     with ThreadPoolExecutor(max_workers=n_worker) as executor:
@@ -105,14 +105,15 @@ def run_multiple_ha_sym(
 
 
 def get_I_nA(
-    V_mV: NDArray[np.float64],
+    V_mV: NDArray64,
     tau: float = 0.5,
     T_K: float = 0.0,
     Delta_meV: float = 0.18,
     gamma_meV: float = 1e-4,
+    gamma_meV_min: float = 1e-4,
     n_worker: int = 16,
     caching: bool = True,
-) -> NDArray[np.float64]:
+) -> NDArray64:
 
     if tau == 0.0:
         return np.zeros_like(V_mV)
@@ -120,6 +121,8 @@ def get_I_nA(
     Delta_T_meV = Delta_meV_of_T(Delta_meV, T_K)
     if Delta_T_meV == 0.0:
         return V_mV * G_0_muS * tau
+
+    gamma_meV = gamma_meV_min if gamma_meV < gamma_meV_min else gamma_meV
 
     # voltage axis
     V_0_mV = V_mV
