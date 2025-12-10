@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from theory.models.constants import G_0_muS, e, h
 from utilities.corporate_design_colors_v4 import colors, cmap
 
-from theory.optimizers.fit_current import NDArray64, SolutionDict
+from theory.optimizers.fit_pat import NDArray64, SolutionDict
 
 
 def show_fitting(solution: SolutionDict, num: int = 0):
