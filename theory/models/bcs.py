@@ -63,13 +63,13 @@ def N_of_E(E_meV: np.ndarray, Delta_meV: float, gamma_meV: float) -> np.ndarray:
 def get_I_nA(
     V_mV: np.ndarray,
     Delta_meV: float | tuple[float, float] = (0.18, 0.18),
-    tau: float = 0.5,
+    G_N: float = 0.5,
     T_K: float = 0.0,
     gamma_meV: float | tuple[float, float] = 0.0,
     gamma_meV_min: float = 1e-4,
 ) -> np.ndarray:
 
-    G_N_muS = tau * G_0_muS
+    G_N_muS = G_N * G_0_muS
 
     # Calculate Current, assuming Ohmic behavior
     I_NN_nA = V_mV * G_N_muS
