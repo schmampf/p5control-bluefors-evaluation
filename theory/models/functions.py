@@ -92,3 +92,22 @@ def cache_hash_pbar(
     string += f"gamma=({gamma_1_meV:.{gamma_tol_meV}f},"
     string += f"{gamma_2_meV:.{gamma_tol_meV}f})meV"
     return string
+
+
+def cache_hash_sym(
+    V_max_mV: float,
+    dV_mV: float,
+    tau: float,
+    T_K: float,
+    Delta_meV: float,
+    gamma_meV: float,
+    string: str = "ha_sym",
+) -> str:
+    string += "_"
+    string += f"V_max={V_max_mV:.{V_tol_mV}f}mV_"
+    string += f"dV={dV_mV:.{V_tol_mV}f}mV_"
+    string += f"tau={tau:.{tau_tol}f}_"
+    string += f"T={T_K:.{T_tol_K}f}K_"
+    string += f"Delta={Delta_meV:.{Delta_tol_meV}f}meV_"
+    string += f"gamma=({gamma_meV:.{gamma_tol_meV}f})meV"
+    return string
