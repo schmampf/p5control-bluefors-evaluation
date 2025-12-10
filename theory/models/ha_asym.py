@@ -22,8 +22,8 @@ from theory.models.constants import gamma_tol_meV
 
 
 WORK_DIR = os.path.join(HOME_DIR, "theory/models/carlosha/")
-CACHE_DIR = os.path.join(WORK_DIR, ".cache")
-HA_EXE = os.path.join(WORK_DIR, "ha")
+CACHE_DIR = os.path.join(WORK_DIR, ".cache_asym")
+HA_EXE = os.path.join(WORK_DIR, "ha_asym")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 
@@ -80,7 +80,7 @@ def run_multiple_ha(
 
     chunk = int(np.ceil((V_max_mV / dV_mV + 1) / n_worker))
     with ThreadPoolExecutor(max_workers=n_worker) as executor:
-        futures = []
+        futures: list = []
         for i in range(n_worker):
             Vi_mV = i * dV_mV * chunk - dV_mV
             Vf_mV = (i + 1) * dV_mV * chunk
