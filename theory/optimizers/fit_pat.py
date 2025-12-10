@@ -38,7 +38,6 @@ class SolutionDict(TypedDict):
     E_mV: Optional[NDArray64]
     weights: Optional[NDArray64]
     maxfev: Optional[int]
-    tau: list[float]
     G_N: float
     T_K: float
     Delta_meV: float
@@ -185,7 +184,6 @@ def fit_I_nA(
         "E_mV": E_mV,
         "weights": weights,
         "maxfev": maxfev,
-        "tau": list(popt_full[6:]),
         "G_N": popt_full[0],
         "T_K": popt_full[1],
         "Delta_meV": popt_full[2],
