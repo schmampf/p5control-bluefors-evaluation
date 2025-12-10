@@ -50,10 +50,6 @@ class SolutionDict(TypedDict):
 def fit_I_nA(
     V_mV: NDArray64,
     I_nA: NDArray64,
-    tau: list[ParameterType] = [
-        (0.5, (0.0, 1.0), False),
-        (0.1, (0.0, 1.0), False),
-    ],
     G_N: ParameterType = (1.0, (0, 10.0), False),
     T_K: ParameterType = (0.2, (0, 1.5), False),
     Delta_meV: ParameterType = (0.195, (0.18, 0.21), False),
@@ -62,7 +58,7 @@ def fit_I_nA(
     nu_GHz: ParameterType = (7.8, (1.0, 20.0), False),
     E_mV: Optional[NDArray64] = None,
     weights: Optional[NDArray64] = None,
-    model: str = "bcs",
+    model: str = "pat",
     optimizer: str = "curve_fit",
     maxfev: Optional[int] = None,
 ) -> SolutionDict:

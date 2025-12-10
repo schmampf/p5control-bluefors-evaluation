@@ -73,7 +73,9 @@ def get_model(
                 return I_nA
 
             # Mask which parameter are used
-            parameter_mask: NDArray[np.bool] = np.full((4), True, dtype=bool)
+            parameter_mask: NDArray[np.bool] = np.array(
+                [True, True, True, True, False, False], dtype=bool
+            )
             return get_bcs, parameter_mask
 
         case "pat" | "bcs+pat" | "dynes+pat":
