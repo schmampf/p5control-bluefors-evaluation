@@ -14,7 +14,7 @@ from tqdm import tqdm
 from contextlib import contextmanager
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from theory.models.constants import G_0_S, G_0_muS
+from theory.utilities.constants import G_0_S, G_0_muS
 from utilities.baseplot import BasePlot
 from utilities.ivevaluation import IVEvaluation
 from utilities.basefunctions import get_norm
