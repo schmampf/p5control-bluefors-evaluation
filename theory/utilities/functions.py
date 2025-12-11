@@ -92,6 +92,21 @@ def cache_hash_pbar(
     return string
 
 
+def cache_hash_nuni(
+    tau: float,
+    T_K: float,
+    Delta_meV: float,
+    gamma_meV: float,
+    string: str = "FCS",
+) -> str:
+    string += "_"
+    string += f"tau={tau:.{tau_tol}f}_"
+    string += f"T={T_K:.{T_tol_K}f}K_"
+    string += f"Delta={Delta_meV:.{Delta_tol_meV}f}meV_"
+    string += f"gamma={gamma_meV:.{gamma_tol_meV}f}meV"
+    return string
+
+
 def cache_hash_sym(
     V_max_mV: float,
     dV_mV: float,
