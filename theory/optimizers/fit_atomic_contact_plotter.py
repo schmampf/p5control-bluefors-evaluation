@@ -184,7 +184,7 @@ def plot_atomic_contact(
     title += "$, \\tau_i=\\{$"
     for tau in tau_fit_temp:
         title += f"${tau:.2f},\\,$"
-    title += "$\\}$"
+    title = title[:-5] + "\\}$"
 
     fig.suptitle(title)
 
@@ -297,7 +297,7 @@ def plot_atomic_contact(
             ax_gam,
             np.mean(weights, axis=(2, 3)),
             gamma_theo_meV,
-            "log$(\\gamma)$ (meV)",
+            "$\\gamma$ (meV)",
         ),
     ]
     axs0: list[Axes] = []
