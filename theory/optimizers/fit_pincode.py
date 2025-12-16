@@ -13,8 +13,8 @@ from jax import jit
 
 from jax import Array
 
-from theory.models.functions import NDArray64, bin_y_over_x
-from theory.models.constants import G_0_muS
+from theory.utilities.functions import NDArray64, bin_y_over_x
+from theory.utilities.constants import G_0_muS
 
 from theory.models.bcs_jnp import bin_y_over_x as bin_y_over_x_jax
 
