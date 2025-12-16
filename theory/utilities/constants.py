@@ -7,7 +7,7 @@ from scipy.constants import Boltzmann as k_B
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
-logger.info("loaded constants...")
+logger.debug("loaded constants...")
 
 h_e_Vs: float = h / e
 G_0_S: float = 2 * e * e / h
