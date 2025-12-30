@@ -549,6 +549,7 @@ def get_color(
     palette: str = "seeblau",
     shade: int | str = "100",
     permutation: str | tuple[int, int, int] = "standard",
+    alpha: float | None = None,
 ) -> NDArray64:
     """Return a single RGB swatch from a named palette.
 
@@ -596,7 +597,12 @@ def get_color(
     if i < 0 or i > 4:
         raise IndexError("shade index must be in [0, 4]")
 
-    return _permuta_rgb(pal[i], permutation)
+    rgb = _permuta_rgb(pal[i], permutation)
+
+    if alpha is None:
+        return rgb
+    else:
+        return np.asarray([rgb[0], rgb[1], rgb[2], alpha], dtype=np.float64)
 
 
 def get_colors(
