@@ -550,6 +550,8 @@ def get_color(
     shade: int | str = "100",
     permutation: str | tuple[int, int, int] = "standard",
     alpha: float | None = None,
+    fake_alpha: float | None = None,
+    background: NDArray64 = np.array([1, 1, 1], dtype=np.float64),
 ) -> NDArray64:
     """Return a single RGB swatch from a named palette.
 
@@ -599,10 +601,21 @@ def get_color(
 
     rgb = _permuta_rgb(pal[i], permutation)
 
-    if alpha is None:
-        return rgb
-    else:
-        return np.asarray([rgb[0], rgb[1], rgb[2], alpha], dtype=np.float64)
+    # Alpha logic (RGBA always)
+    a = 1.0 if alpha is None else float(alpha)
+    a = float(np.clip(a, 0.0, 1.0))
+
+    if fake_alpha is not None:
+        fa = float(np.clip(float(fake_alpha), 0.0, 1.0))
+        bg = np.asarray(background, dtype=np.float64).reshape(-1)
+        if bg.size < 3:
+            raise ValueError("background must have at least 3 components")
+        bg3 = np.clip(bg[:3], 0.0, 1.0)
+
+        rgb = (1.0 - fa) * bg3 + fa * rgb
+        a = 1.0  # baked-in transparency -> return opaque
+
+    return np.asarray([rgb[0], rgb[1], rgb[2], a], dtype=np.float64)
 
 
 def get_colors(
@@ -642,9 +655,6 @@ def get_colors(
     rgba:
         Array of shape (4,) in [0, 1].
     """
-
-    if not isinstance(index, int):
-        raise TypeError("index must be an int")
 
     # Resolve palette list
     if isinstance(palettes, str):
