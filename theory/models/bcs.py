@@ -1,20 +1,75 @@
-import numpy as np
-import sys
+"""BCS tunnel-junction quasiparticle current utilities.
 
-sys.path.append("/Users/oliver/Documents/p5control-bluefors-evaluation")
+This module implements a minimal Dynes-BCS quasiparticle (QP) tunneling model
+for SIS and NIS junctions, used to generate `I_QP(V)` characteristics.
+
+Units and conventions
+---------------------
+- Voltages are expressed in mV and energies in meV.
+- Temperatures are expressed in K.
+- `G_N` denotes the dimensionless normal conductance `g = G/G_0`.
+  The physical conductance is `G = G_N * G_0` with `G_0` in µS.
+- Currents are returned in nA.
+
+Notes
+-----
+The implementation is intended for robust figure generation and fitting, not
+for maximally efficient or fully general microscopic modeling.
+"""
+
+import numpy as np
+
+from theory.utilities.types import NDArray64
 
 from theory.utilities.constants import k_B_meV
 from theory.utilities.constants import G_0_muS
 
 from theory.utilities.functions import bin_y_over_x
 
-from theory.utilities.types import NDArray64
+
+def T_C_K_of_Delta_meV(Delta_meV: float = 0.18) -> float:
+    """Estimate the BCS critical temperature from the zero-temperature gap.
+
+    Uses the weak-coupling relation Δ(0) = 1.764 k_B T_c.
+
+    Parameters
+    ----------
+    Delta_meV
+        Zero-temperature gap Δ(0) in meV.
+
+    Returns
+    -------
+    float
+        Critical temperature T_c in kelvin.
+    """
+    T_C_K = Delta_meV / (1.764 * k_B_meV)
+    return T_C_K
 
 
 def Delta_meV_of_T(Delta_meV: float, T_K: float) -> float:
-    """Calculates the energy gap in eV at a given temperature."""
+    """BCS gap suppression Δ(T) for a weak-coupling superconductor.
 
-    T_C_K = Delta_meV / (1.76 * k_B_meV)  # Critical temperature in Kelvin
+    Parameters
+    ----------
+    Delta_meV
+        Zero-temperature gap Δ(0) in meV.
+    T_K
+        Temperature in kelvin.
+
+    Returns
+    -------
+    float
+        Gap Δ(T) in meV.
+
+    Notes
+    -----
+    Uses the common analytic approximation
+
+        Δ(T) = Δ(0) tanh(1.74 * sqrt(T_c/T - 1)).
+
+    For T >= T_c this returns 0.
+    """
+    T_C_K = T_C_K_of_Delta_meV(Delta_meV)  # Critical temperature in Kelvin
     if T_K < 0:
         raise ValueError("Temperature (K) must be non-negative.")
     if T_K >= T_C_K:
@@ -28,7 +83,24 @@ def Delta_meV_of_T(Delta_meV: float, T_K: float) -> float:
 
 
 def f_of_E(E_meV: NDArray64, T_K: float) -> NDArray64:
-    """Fermi-Dirac distribution at zero and finite temperature."""
+    """Fermi--Dirac distribution f(E) evaluated in meV units.
+
+    Parameters
+    ----------
+    E_meV
+        Energies in meV.
+    T_K
+        Temperature in kelvin.
+
+    Returns
+    -------
+    NDArray64
+        Occupations f(E).
+
+    Notes
+    -----
+    At T=0, returns a step function (1 for E<0, 0 for E>0).
+    """
     if T_K < 0:
         raise ValueError("Temperature (K) must be non-negative.")
     elif T_K == 0:
@@ -41,7 +113,28 @@ def f_of_E(E_meV: NDArray64, T_K: float) -> NDArray64:
 
 
 def N_of_E(E_meV: NDArray64, Delta_meV: float, gamma_meV: float) -> NDArray64:
-    """Computes the density of states for a superconductor using the Dynes model."""
+    """Dynes-broadened BCS density of states N(E).
+
+    Implements the standard Dynes substitution E -> E + iγ.
+
+    Parameters
+    ----------
+    E_meV
+        Energies in meV.
+    Delta_meV
+        Superconducting gap Δ in meV.
+    gamma_meV
+        Dynes broadening γ in meV.
+
+    Returns
+    -------
+    NDArray64
+        Dimensionless DOS N(E) normalized to the normal-state DOS.
+
+    Notes
+    -----
+    The result is clipped to a finite range for numerical robustness.
+    """
     if Delta_meV < 0:
         raise ValueError("Energy gap (eV) must be non-negative.")
     if gamma_meV < 0:
@@ -70,7 +163,41 @@ def get_I_nA(
     gamma_meV: float | tuple[float, float] = 0.0,
     gamma_meV_min: float = 1e-4,
 ) -> NDArray64:
+    """Quasiparticle tunneling current I(V) for NIS/SIS with Dynes DOS.
 
+    Computes the QP current via energy integration of the tunneling expression
+    using Dynes-broadened BCS densities of states.
+
+    Parameters
+    ----------
+    V_mV
+        Bias voltage array in mV.
+    Delta_meV
+        Superconducting gap(s) in meV. Provide a single float for symmetric
+        junctions, or a tuple (Δ1, Δ2) for asymmetric cases.
+    G_N
+        Dimensionless normal conductance `g = G/G_0` (so `G = G_N * G_0`).
+    T_K
+        Temperature in kelvin.
+    gamma_meV
+        Dynes broadening(s) in meV. Provide a single float for symmetric
+        junctions, or a tuple (γ1, γ2) for asymmetric cases.
+    gamma_meV_min
+        Minimal Dynes broadening used as a lower bound for numerical stability.
+
+    Returns
+    -------
+    NDArray64
+        Quasiparticle current in nA, evaluated on `V_mV`.
+
+    Notes
+    -----
+    - For T >= T_c (i.e. Δ(T)=0), returns the ohmic line I = G V.
+    - Internally, the integration grid is constructed from the voltage spacing
+      and `gamma_meV_min` to resolve sharp features near the gap edge.
+    - The implementation assumes particle-hole symmetry and mirrors the
+      computed I(V>=0) branch to negative voltages.
+    """
     G_N_muS = G_N * G_0_muS
 
     # Calculate Current, assuming Ohmic behavior
