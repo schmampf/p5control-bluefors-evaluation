@@ -548,7 +548,7 @@ def _as_rgba(c: str | NDArray64) -> tuple[float, float, float, float]:
 def get_color(
     palette: str = "seeblau",
     shade: int | str = "100",
-    permutation: str | tuple[int, int, int] = "standard",
+    permutation: str | Sequence[int] = "standard",
     alpha: float | None = None,
     fake_alpha: float | None = None,
     background: NDArray64 = np.array([1, 1, 1], dtype=np.float64),
