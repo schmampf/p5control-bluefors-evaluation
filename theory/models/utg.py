@@ -11,7 +11,7 @@ def get_I_nA(
     A_mV: NDArray[np.float64],
     V_mV: NDArray[np.float64],
     I_nA: NDArray[np.float64],
-    nu_GHz: float,
+    nu_GHz: float = 10.0,
     N: int = 200,
     M: int = 10,
 ) -> NDArray[np.float64]:
