@@ -148,14 +148,30 @@ def get_dydx(
     x: NDArray64,
     y: NDArray64,
     frac: float = 0.1,
-) -> float:
-    x_np: NDArray64 = np.asarray(x, dtype=np.float64)
-    y_np: NDArray64 = np.asarray(y, dtype=np.float64)
-    i = int(np.ceil(x_np.shape[0] * frac))
-    return np.mean(
-        [
-            np.polyfit(x_np[:+i], y_np[:+i], deg=1)[0],
-            np.polyfit(x_np[-i:], y_np[-i:], deg=1)[0],
-        ],
-        dtype=float,
+) -> tuple[float, float]:
+    """Estimate endpoint slopes dy/dx from the left and right edges.
+
+    Fits a first-order polynomial (line) to the first and last fraction of the
+    data and returns the corresponding slopes.
+
+    Parameters
+    ----------
+    x, y:
+        Input data arrays of equal length.
+    frac:
+        Fraction of samples used for each endpoint fit (default: 0.1).
+
+    Returns
+    -------
+    tuple[float, float]
+        `(dydx_left, dydx_right)` from linear fits to the left and right edge.
+
+    Notes
+    -----
+    This uses `numpy.polyfit` and therefore runs on the host (NumPy), not JAX.
+    """
+    i = int(np.ceil(x.shape[0] * frac))
+    return (
+        np.polyfit(x[:+i], y[:+i], deg=1)[0],
+        np.polyfit(x[-i:], y[-i:], deg=1)[0],
     )
