@@ -10,11 +10,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib as mpl
 
+import superconductivity.api as sc
+from superconductivity.api import G_0_muS
+
 from tqdm import tqdm
 from contextlib import contextmanager
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from theory.utilities.constants import G_0_S, G_0_muS
 from utilities.baseplot import BasePlot
 from utilities.ivevaluation import IVEvaluation
 from utilities.basefunctions import get_norm
