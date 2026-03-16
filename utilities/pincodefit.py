@@ -1,5 +1,7 @@
-import sys
 import pickle
+import sys
+from pathlib import Path
+
 import numpy as np
 from pygad import GA as GeneticAlgorithm
 from importlib import reload
@@ -10,7 +12,9 @@ def hash_genes(genes: np.ndarray) -> str:
     return hashlib.sha1(genes.tobytes()).hexdigest()
 
 
-sys.path.append("/Users/oliver/Documents/p5control-bluefors-evaluation")
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.append(str(_REPO_ROOT))
 
 from utilities.basefunctions import bin_y_over_x
 
