@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib as mpl
 
 import superconductivity.api as sc
-from superconductivity.api import G_0_muS
+from superconductivity.api import G0_muS as G_0_muS
 
 from tqdm import tqdm
 from contextlib import contextmanager
